@@ -145,6 +145,12 @@ adb -s SERIAL shell am instrument -w -e class in.financeministry.app.OfficialUpg
 ```
 
 The seed stage creates and edits one synthetic record using the previous app's API.
+The optional `-e upgradeFixtures expanded` mode additionally seeds/verifies a
+group share, partial repayment, category, source and preferences. Pass it to both
+stages only when using a seed harness that supports it; alpha.25's original test
+harness does not. For the alpha.25-to-alpha.26 local check, the alpha.26 harness
+was separately verified compatible with alpha.25's APIs and used for both stages.
+Do not silently omit expanded assertions when an expanded fixture was requested.
 The verify stage checks the amount, correction history, migrated schema and reopened
 encrypted storage. Require `OK (1 test)` from both stages; ADB exit status alone is
 not sufficient. Do not uninstall between stages. Repeat verification after stopping

@@ -13,6 +13,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -30,6 +32,7 @@ import java.time.LocalDate
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.launch
 
 /** Standalone entry point retained for transaction-details navigation and UI tests. */
 @Composable
@@ -64,6 +67,10 @@ fun PeopleContent(repository: TransactionRepository, month: LocalDate, onChanged
     var monthDetails by rememberSaveable { mutableStateOf(false) }
     var peopleView by rememberSaveable { mutableStateOf(true) }
     var monthOnly by rememberSaveable { mutableStateOf(false) }
+    var settlementPersonId by rememberSaveable { mutableStateOf<String?>(null) }
+    var undoEntries by remember { mutableStateOf<List<RepaymentEntity>>(emptyList()) }
+    var undoBusy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(month, revision, retry) {
         error = false
         try { summary = repository.repaymentSummary(month) }
@@ -98,6 +105,8 @@ fun PeopleContent(repository: TransactionRepository, month: LocalDate, onChanged
                 val allDateBalances = RepaymentAccounting.people(data.copy(shares = if (peopleView) data.shares else emptyList()))
                 Text("${owedBalanceCountLabel(allDateBalances)} · every repayment accounted for",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                RepaymentProgress("All dates", data.expenses.fold(BigInteger.ZERO) { total, expense ->
+                    total + BigInteger.valueOf(RepaymentAccounting.principal(expense)) }, data.outstanding)
                 Spacer(Modifier.height(22.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 val monthName = month.format(DateTimeFormatter.ofPattern("MMMM"))
@@ -110,6 +119,7 @@ fun PeopleContent(repository: TransactionRepository, month: LocalDate, onChanged
                 }
                 if (monthDetails) {
                     RepaymentMetric("Still unpaid from this month's payments", data.monthOutstanding)
+                    RepaymentProgress("Selected month's expenses", data.newlyOwed, data.monthOutstanding)
                     Text("Receipts may settle older expenses. Undated legacy repayments stay outside monthly receipts.",
                         Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -130,6 +140,18 @@ fun PeopleContent(repository: TransactionRepository, month: LocalDate, onChanged
                 }
                 feedback?.let { Text(it, Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.bodyMedium) }
+                if (undoEntries.isNotEmpty()) {
+                    Text("Undo keeps the received payment in Activity.", style = MaterialTheme.typography.bodySmall)
+                    TextButton(enabled = !undoBusy, onClick = {
+                        undoBusy = true
+                        scope.launch {
+                            try { repository.undoPersonRepayment(undoEntries); undoEntries = emptyList(); feedback = "Settlement undone. Receipt kept in Activity."; onChanged() }
+                            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                            catch (_: Exception) { feedback = "Could not undo. Check expense repayment history; it may have changed." }
+                            finally { undoBusy = false }
+                        }
+                    }) { Text(if (undoBusy) "Undoing…" else "Undo settlement") }
+                }
             }
             items(visible, key = { it.id }) { person ->
                 Row(Modifier.fillMaxWidth().clickable { personId = person.id }.padding(vertical = 17.dp),
@@ -161,9 +183,15 @@ fun PeopleContent(repository: TransactionRepository, month: LocalDate, onChanged
         }
     }
     val person = people.firstOrNull { it.id == personId }
-    if (person != null && recordingId == null) PersonBalanceSheet(person,
+    if (person != null && recordingId == null && settlementPersonId == null) PersonBalanceSheet(person,
         onDismiss = { personId = null }, onOpenTransaction = onOpenTransaction,
+        onRecordAcross = if (peopleView && person.name != "Unassigned") ({ settlementPersonId = person.id }) else null,
         onRecord = { entry -> recordingId = entry.expense.id; recordingMemberId = entry.memberId })
+    people.firstOrNull { it.id == settlementPersonId }?.let { target ->
+        PersonSettlementSheet(repository, target, onDismiss = { settlementPersonId = null; personId = null }, onSaved = {
+            undoEntries = it; feedback = "Settlement recorded. Your spending is unchanged."; onChanged()
+        })
+    }
     data?.expenses?.firstOrNull { it.id == recordingId }?.let { expense ->
         RepaymentEditor(repository, expense, null, onDismiss = { recordingId = null; recordingMemberId = null },
             initialMemberId = recordingMemberId, onSaved = {
@@ -181,10 +209,26 @@ private fun PersonInitial(name: String, modifier: Modifier = Modifier) {
     }
 }
 
+/** Expense-cohort progress, not receipts received during a calendar period. */
+@Composable
+private fun RepaymentProgress(scope: String, expected: BigInteger, remaining: BigInteger) {
+    val received = (expected - remaining).coerceAtLeast(BigInteger.ZERO)
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp).semantics {
+        contentDescription = "$scope: expected ${money(expected)}, received ${money(received)}, remaining ${money(remaining)}"
+    }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(if (expected.signum() == 0) "No repayments expected" else "${money(received)} received of ${money(expected)} expected",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (expected.signum() > 0) LinearProgressIndicator(progress = {
+            received.toBigDecimal().divide(expected.toBigDecimal(), 5, java.math.RoundingMode.HALF_UP).toFloat().coerceIn(0f, 1f)
+        }, modifier = Modifier.fillMaxWidth().height(4.dp), color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PersonBalanceSheet(person: PersonRepaymentBalance, onDismiss: () -> Unit,
-    onOpenTransaction: (String) -> Unit, onRecord: (PersonExpenseBalance) -> Unit) {
+    onOpenTransaction: (String) -> Unit, onRecordAcross: (() -> Unit)? = null, onRecord: (PersonExpenseBalance) -> Unit) {
     val unpaid = person.expenses.filter { it.outstandingMinor > 0 }
     var selectedExpense by rememberSaveable(person.id) { mutableStateOf(unpaid.singleOrNull()?.expense?.id) }
     ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null,
@@ -205,6 +249,7 @@ private fun PersonBalanceSheet(person: PersonRepaymentBalance, onDismiss: () -> 
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                    RepaymentProgress("This person's visible expenses", person.received + person.outstanding, person.outstanding)
                 }
                 items(person.expenses, key = { it.expense.id }) { entry ->
                     Surface(color = MaterialTheme.colorScheme.background, shape = RoundedCornerShape(15.dp)) {
@@ -232,6 +277,8 @@ private fun PersonBalanceSheet(person: PersonRepaymentBalance, onDismiss: () -> 
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            if (unpaid.size > 1 && onRecordAcross != null) TextButton(onClick = onRecordAcross,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Settle multiple expenses") }
             Button(onClick = {
                 if (unpaid.isEmpty()) onDismiss() else unpaid.firstOrNull { it.expense.id == selectedExpense }?.let(onRecord)
             }, enabled = unpaid.isEmpty() || unpaid.any { it.expense.id == selectedExpense }, shape = RoundedCornerShape(12.dp),

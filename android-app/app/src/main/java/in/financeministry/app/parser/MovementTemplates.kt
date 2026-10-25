@@ -20,7 +20,7 @@ internal object MovementTemplates {
     // Receipt is already complete; the later adjustment of dues is not a future refund.
     // Anchor the entire issuer layout instead of treating every "received" as a credit.
     private val receivedCardRefundLayout = Regex(
-        """^refund of\s+$money\s+from\s+(?<merchant>[a-z0-9][a-z0-9 .&'/_()-]{0,79}?)\s+received on your\s+federal bank\s+one credit card\.\s*(?:this will be adjusted against your outstanding dues\.\s*)?(?:check details:\s*https://\S+)?$""",
+        """^refund of\s+$money\s+from\s+(?<merchant>[a-z0-9][a-z0-9 .&'/_()-]{0,79}?)\s+received on your\s+federal bank\s+one credit card\.\s*(?:this will be adjusted against your outstanding dues\.\s*)?(?:check details:\s*https://\S+|check details in your app\.)?$""",
         RegexOption.IGNORE_CASE,
     )
     private val refundQualifier = Regex("""\b(?:not|never|yet|been|be|may|will|pending)\b""", RegexOption.IGNORE_CASE)

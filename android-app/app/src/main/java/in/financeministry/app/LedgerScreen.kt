@@ -150,6 +150,7 @@ private fun LedgerContent(repository: TransactionRepository, request: Pair<Strin
     var showGuide by key(BuildConfig.VERSION_CODE) { rememberSaveable { mutableStateOf(`in`.financeministry.app.feature.shouldShowAppTour(
         repository.preferences.getInt(`in`.financeministry.app.feature.APP_TOUR_VERSION_KEY, 0), BuildConfig.VERSION_CODE)) } }
     val tourIsUpdate = repository.preferences.getBoolean("onboarding_complete", false)
+    var fullTourRequested by rememberSaveable { mutableStateOf(false) }
     fun finishGuide() {
         repository.preferences.edit().putBoolean("onboarding_complete", true)
             .putInt(`in`.financeministry.app.feature.APP_TOUR_VERSION_KEY, BuildConfig.VERSION_CODE).apply()
@@ -365,7 +366,11 @@ private fun LedgerContent(repository: TransactionRepository, request: Pair<Strin
                 destination = "Transactions"; offset = 0; snapshot = null
             },
             onReview = { showInsights = false; destination = "Review"; offset = 0; snapshot = null },
-            onBudget = { showInsights = false; optionalToolsInitialTab = "Budgets"; settings = true; settingsSection = "Optional tools" })
+            onBudget = { showInsights = false; optionalToolsInitialTab = "Budgets"; settings = true; settingsSection = "Optional tools" },
+            onCategories = { categories ->
+                showInsights=false; filter=combinedFilter("All","All","Debit",categories);search=""
+                destination="Transactions";offset=0;snapshot=null
+            })
         return
     }
     Surface(Modifier.fillMaxSize()) {
@@ -418,7 +423,7 @@ private fun LedgerContent(repository: TransactionRepository, request: Pair<Strin
                         onOpenSms = { finishGuide(); settings = true; settingsSection = "SMS & messages" },
                         onOpenSources = { finishGuide(); settings = true; settingsSection = "Payment sources" },
                         onOpenReminder = { finishGuide(); settings = true; settingsSection = "Review reminders" },
-                        isUpdate = tourIsUpdate,
+                        isUpdate = tourIsUpdate, fullTour = fullTourRequested,
                         onChapterChanged = { scope.launch { ledgerListState.scrollToItem(0) } })
                 }
                 if (listDestination == "Overview" && !listGuide) item {
@@ -464,14 +469,18 @@ private fun LedgerContent(repository: TransactionRepository, request: Pair<Strin
                     if(showBatch) TextButton(onClick={showBatch=false;batchSelectedIds=arrayListOf()},contentPadding=PaddingValues(0.dp)) {Text("Done selecting",style=MaterialTheme.typography.labelMedium)}
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         val detailFilters = combinedFilter(purposePart(filter), originPart(filter), "All", categoryParts(filter), sourceParts(filter), paymentKindPart(filter))
-                        if (detailFilters != "All") {
-                            LedgerChoiceChip(selected = true, onClick = {
+                        if (detailFilters != "All") detailFilters.split("+").forEach { token ->
+                            val label = filterLabel(token, paymentSources)
+                            val kind = when { token.startsWith("Category:") -> "category"; token.startsWith("Source:") -> "source"; else -> "activity" }
+                            InputChip(selected = true, onClick = {
                                 focusManager.clearFocus(); keyboardController?.hide()
-                                draftPurposeFilter = purposePart(filter); draftOriginFilter = originPart(filter); draftDirectionFilter = directionPart(filter); draftPaymentKindFilter = paymentKindPart(filter); draftCategories = categoryParts(filter); draftSourceIds = sourceParts(filter); draftSearch = search; showFilters = true
-                            }, label = { Text(filterLabel(filter, paymentSources)) })
+                                filter = filter.split("+").filterNot { it == token }.joinToString("+").ifBlank { "All" }
+                                offset = 0; snapshot = null
+                            }, label = { Text(label) }, trailingIcon = { LedgerIcon("close", Modifier.size(14.dp)) },
+                                modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Remove $kind filter $label" })
                         }
                         if (filter != "All" || search.isNotBlank()) TextButton(onClick = { filter = "All"; search = ""; offset = 0; snapshot = null },
-                            modifier = Modifier.semantics { contentDescription = "Clear transaction filters" }) { Text("Clear") }
+                            modifier = Modifier.semantics { contentDescription = "Clear transaction filters" }) { Text("Reset filters") }
                     }
                     snapshot?.let {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
@@ -486,6 +495,8 @@ private fun LedgerContent(repository: TransactionRepository, request: Pair<Strin
                     if (showBatch) TextButton(onClick = {
                         batchSelectedIds = ArrayList(snapshot?.rows.orEmpty().map { it.id })
                     }) { Text("Select visible records") }
+                    TextButton(onClick = { focusManager.clearFocus(); keyboardController?.hide(); settings = true; settingsSection = "Missing a payment?" },
+                        contentPadding = PaddingValues(0.dp)) { Text("Missing a payment?", style = MaterialTheme.typography.labelSmall) }
                 }
                 if (listDestination == "Review") item {
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
@@ -493,6 +504,7 @@ private fun LedgerContent(repository: TransactionRepository, request: Pair<Strin
                         TextButton(onClick={matchHistory=false;showMatches=true}) {Text("Possible matches")}
                     }
                     Text("A quick check keeps your totals accurate. These payments are excluded until you confirm.", style = MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = { settings = true; settingsSection = "Missing a payment?" }) { Text("Missing a payment?") }
                     if (categoryConflictCount > 0) TextButton(onClick = { settings = true; settingsSection = "Category rules" }) {
                         Text("$categoryConflictCount category choices needed · separate from financial review")
                     }
@@ -612,7 +624,7 @@ private fun LedgerContent(repository: TransactionRepository, request: Pair<Strin
                         }
                         SettingsRow("Data and privacy", "Local storage, erasure and recovery") { settingsSection = "Data & privacy" }
                         SettingsRow("App tour", "Explore features and optional setup again") {
-                            showGuide = true; settings = false; settingsSection = null; destination = "Overview"
+                            fullTourRequested = true; showGuide = true; settings = false; settingsSection = null; destination = "Overview"
                             scope.launch { ledgerListState.scrollToItem(0) }
                         }
                         }
@@ -635,6 +647,10 @@ private fun LedgerContent(repository: TransactionRepository, request: Pair<Strin
                         }
                     }
                     "Help & feedback" -> `in`.financeministry.app.feature.SupportPanel()
+                    "Missing a payment?" -> `in`.financeministry.app.feature.PaymentRecoveryPanel(
+                        onAdd = { settings = false; settingsSection = null; selected = null; selectedId = null; quickForm = false; form = true },
+                        onCapture = { settingsSection = "Capture health" },
+                        onImport = { settingsSection = "Import past messages" })
                     "Personalization" -> {
                         Text("A name is optional and stays on this device.", style = MaterialTheme.typography.bodySmall)
                         OutlinedTextField(value = preferredNameDraft, onValueChange = { preferredNameDraft = it.take(40) },

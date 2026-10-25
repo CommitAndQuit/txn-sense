@@ -18,6 +18,8 @@ import java.util.UUID
 /** Home must not invent a person count from a legacy group or an unnamed balance. */
 class HomeBalancePresentationUiTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
+    private fun monthlyBalance(amount: String, count: String): String =
+        "$amount unpaid from ${java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("MMM"))} · $count"
     private fun withLedger(seed: suspend (TransactionRepository) -> Unit, check: (TransactionRepository) -> Unit) {
         val repo = TransactionRepository(ApplicationProvider.getApplicationContext<Application>(), "home_balance_${UUID.randomUUID()}")
         try {
@@ -36,9 +38,9 @@ class HomeBalancePresentationUiTest {
 
     // Counting an unnamed group as one person must fail in the rendered Home explanation.
     @Test fun a_legacy_group_is_presented_as_one_balance_not_one_person() = withLedger({ group(it) }) { repo ->
-        rule.waitUntil(15000) { rule.onAllNodesWithText("₹600 from this month · 1 balance").fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithText("₹600 from this month · 1 balance").assertIsDisplayed()
-        rule.onNodeWithText("₹600 from this month · 1 person").assertDoesNotExist()
+        rule.waitUntil(15000) { rule.onAllNodesWithText(monthlyBalance("₹600", "1 balance")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText(monthlyBalance("₹600", "1 balance")).assertIsDisplayed()
+        rule.onNodeWithText(monthlyBalance("₹600", "1 person")).assertDoesNotExist()
         rule.onNodeWithContentDescription("Open repayments").performClick()
         rule.waitUntil(15000) { rule.onNodeWithText("1 balance · every repayment accounted for").isDisplayed() }
         rule.onNodeWithText("1 balance · every repayment accounted for").assertIsDisplayed()
@@ -52,8 +54,8 @@ class HomeBalancePresentationUiTest {
         val alice = repo.addLocalMember("Alice"); val bob = repo.addLocalMember("Bob")
         repo.saveGroupSplit(id, 30000, listOf(MemberShareInput(alice.id, 30000), MemberShareInput(bob.id, 30000)), repo.get(id)!!.updatedAt)
     }) { repo ->
-        rule.waitUntil(15000) { rule.onAllNodesWithText("₹600 from this month · 2 people").fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithText("₹600 from this month · 2 people").assertIsDisplayed()
+        rule.waitUntil(15000) { rule.onAllNodesWithText(monthlyBalance("₹600", "2 people")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText(monthlyBalance("₹600", "2 people")).assertIsDisplayed()
         rule.onNodeWithContentDescription("Open repayments").performClick()
         rule.waitUntil(15000) { rule.onNodeWithText("2 people · every repayment accounted for").isDisplayed() }
         rule.onNodeWithText("2 people · every repayment accounted for").assertIsDisplayed()
@@ -65,8 +67,8 @@ class HomeBalancePresentationUiTest {
         repo.save(ManualInput("100", Direction.Debit, System.currentTimeMillis(), TransactionType.Other,
             ownership = SpendingOwnership.ForOther))
     }) { repo ->
-        rule.waitUntil(15000) { rule.onAllNodesWithText("₹100 from this month · 1 balance").fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithText("₹100 from this month · 1 balance").assertIsDisplayed()
+        rule.waitUntil(15000) { rule.onAllNodesWithText(monthlyBalance("₹100", "1 balance")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText(monthlyBalance("₹100", "1 balance")).assertIsDisplayed()
         assertEquals(10000L, runBlocking { repo.snapshot().outstandingRepayments.toLong() })
     }
 

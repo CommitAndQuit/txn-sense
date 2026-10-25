@@ -35,6 +35,11 @@ import java.time.format.DateTimeFormatter
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TransactionForm(repository: TransactionRepository, existing: TransactionEntity?, onDone: () -> Unit, onDirtyChange: (Boolean) -> Unit = {}, quickOnly: Boolean = false, onCancel: () -> Unit = onDone) {
+    val needsFinancialReview = existing?.reviewState == "NeedsReview"
+    // Keep these controls in place after a choice, so corrections remain reversible.
+    val reviewStatus = needsFinancialReview && existing?.status in listOf("Unknown", "Pending")
+    val reviewMethod = needsFinancialReview && existing?.channel == "Unknown"
+    val reviewKind = needsFinancialReview && existing?.transactionType == "Unknown"
     var compact by rememberSaveable(existing?.id, quickOnly) { mutableStateOf(quickOnly && existing != null) }
     val formatter = remember { DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm").withResolverStyle(java.time.format.ResolverStyle.STRICT) }
     val draftId = rememberSaveable(existing?.id) { java.util.UUID.randomUUID().toString() }
@@ -67,7 +72,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
     var availableCategories by remember { mutableStateOf(transactionCategories) }
     var addingCategory by remember { mutableStateOf(false) }
     val revision by repository.revision.collectAsState()
-    var detailsExpanded by rememberSaveable(existing?.id, quickOnly) { mutableStateOf(existing?.status == "Unknown" || existing?.channel == "Unknown") }
+    var detailsExpanded by rememberSaveable(existing?.id, quickOnly) { mutableStateOf(!needsFinancialReview && (existing?.status == "Unknown" || existing?.channel == "Unknown")) }
     var optional by rememberSaveable(existing?.id, quickOnly) { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -106,6 +111,21 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         }
         if (!compact) {
         Text(if (existing?.reviewState == "NeedsReview") "Check the details below. Unconfirmed transactions are excluded from totals." else "${friendly(existing?.sourceType ?: "Manual")} · Stored only on this device", style = MaterialTheme.typography.bodySmall)
+        if (needsFinancialReview && existing != null) {
+            Text("Why this needs review", style = MaterialTheme.typography.labelMedium)
+            Text(`in`.financeministry.app.ui.reviewExplanation(existing),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (reviewStatus) Choice("Check payment status", status, TransactionStatus.entries.map { it.name }) { status = it }
+        if (reviewMethod) Choice("Check payment method", channel,
+            Channel.entries.filter { it !in listOf(Channel.Unknown, Channel.Other) }.map { it.name }) { chosen ->
+            channel = chosen
+            if (sources.none { it.id == sourceId && it.channel == chosen }) sourceId = null
+        }
+        if (reviewKind) Choice("Check payment kind", type, TransactionType.entries.filter { it != TransactionType.Unknown }.map { it.name }) {
+            type = it
+            ownership = if (it == "SelfTransfer") "SelfTransfer" else if (ownership == "SelfTransfer") "Personal" else ownership
+        }
         LedgerTextInput(amount, { amount = it }, label = "Amount (INR)", amountStyle = true, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
         if (existing != null && amount.isBlank()) Text("Enter the transaction amount; it could not be identified.", color = MaterialTheme.colorScheme.error)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -134,7 +154,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         Choice("Category", category, availableCategories) { category = it }
         TextButton(onClick = { addingCategory = true }) { Text("Add category") }
         if (existing?.categoryNeedsReview == true) Text("Conflicting rules matched this payment. Choose its category; the payment's financial status is unchanged.", style = MaterialTheme.typography.bodySmall)
-        if (label.trim().length >= 2 && detailsExpanded) {
+        if (label.trim().length >= 2 && (compact || detailsExpanded)) {
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Checkbox(checked = rememberCategory, onCheckedChange = { rememberCategory = it })
                 Text("Remember this category for future payments", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
@@ -228,19 +248,19 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         TextButton(onClick = {
             android.app.TimePickerDialog(context, pickerTheme, { _, hour, minute -> date = LocalDateTime.parse(date, formatter).withHour(hour).withMinute(minute).format(formatter) }, selectedDate.hour, selectedDate.minute, android.text.format.DateFormat.is24HourFormat(context)).show()
         }) { Text("Time: ${selectedDate.format(DateTimeFormatter.ofPattern("HH:mm"))}") }
-        Choice("Payment method", channel, Channel.entries.filter { it !in listOf(Channel.Unknown, Channel.Other) }.map { it.name }) { chosen ->
+        if (!reviewMethod) Choice("Payment method", channel, Channel.entries.filter { it !in listOf(Channel.Unknown, Channel.Other) }.map { it.name }) { chosen ->
             channel = chosen
             if (sources.none { it.id == sourceId && it.channel == chosen }) sourceId = null
         }
         if (sources.any { it.active && it.channel == channel } || sourceId != null) SourceChoice(sourceId, channel, sources) { sourceId = it }
-        if (status == "Unknown") Choice("Payment status — please check", status, TransactionStatus.entries.map { it.name }) { status = it }
+        if (!reviewStatus && status == "Unknown") Choice("Payment status — please check", status, TransactionStatus.entries.map { it.name }) { status = it }
         TextButton(onClick = { optional = !optional }) { Text(if (optional) "Fewer details" else "Advanced details") }
         if (optional) {
-            Choice("Transaction type", type, TransactionType.entries.map { it.name }) {
+            if (!reviewKind) Choice("Transaction type", type, TransactionType.entries.map { it.name }) {
                 type = it
                 ownership = if (it == "SelfTransfer") "SelfTransfer" else if (ownership == "SelfTransfer") "Personal" else ownership
             }
-            if (status != "Unknown") Choice("Payment status", status, TransactionStatus.entries.map { it.name }) { status = it }
+            if (!reviewStatus && status != "Unknown") Choice("Payment status", status, TransactionStatus.entries.map { it.name }) { status = it }
             LedgerTextInput(hint, { hint = it }, label = "Account last 4 digits (optional)", singleLine = true, modifier = Modifier.fillMaxWidth())
             Text("Use short labels and notes. Do not paste SMS, OTPs, personal contact names, UPI IDs or full account numbers. Text stays encrypted on this device.", style = MaterialTheme.typography.bodySmall)
         }

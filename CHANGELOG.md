@@ -4,6 +4,24 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.1.0-alpha.26
+
+- Keep Home compact with a top-category summary; add selectable spending charts
+  and ranked category bars in Spending breakdown using personal-share amounts.
+- Add removable Activity filter chips and optional merchant-category rules in
+  quick edit. Surface uncertain Review fields and missing-payment recovery links.
+- Simplify first-use guidance to three skippable steps and updates to a short
+  summary; keep the complete tour in Settings.
+- Settle multiple expenses for one person with an oldest-first allocation preview,
+  atomic save and Undo. Show expected, received and remaining repayment progress,
+  keeping expense-month progress separate from repayment-month totals.
+- Recognize bounded ICICI dispute-footer and Federal One Card refund-detail
+  variations (parser revision 15), with regression checks for ambiguous messages.
+- Local validation: 237 JVM tests, 52 targeted emulator checks, signed alpha.25
+  upgrade preservation and minified startup smoke check. Synthetic parser examples
+  are regression evidence, not a general accuracy claim. Physical-device capture,
+  independent fresh SMS evaluation and human usability checks remain pending.
+
 ## 0.1.0-alpha.25
 
 - Add **View original SMS** to SMS transaction details. Read an exact, unique

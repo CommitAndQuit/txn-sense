@@ -17,6 +17,34 @@ import org.junit.Test
 class FirstUseGuideUiTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
 
+    @Test fun short_setup_finishes_in_three_steps_without_enabling_permissions() {
+        var completed = 0
+        var actions = 0
+        rule.setContent {
+            MaterialTheme { Column(Modifier.verticalScroll(rememberScrollState())) {
+                FirstUseGuide(false, false, false, { completed++ }, { actions++ }, { actions++ },
+                    { actions++ }, { actions++ }, fullTour = false)
+            } }
+        }
+        repeat(2) { rule.onNodeWithText("Next").performScrollTo().performClick() }
+        rule.onNodeWithText("Next").assertDoesNotExist()
+        rule.onNodeWithText("Start using app").performScrollTo().performClick()
+        rule.runOnIdle { assertEquals(1, completed); assertEquals(0, actions) }
+    }
+
+    @Test fun update_summary_is_one_skippable_step() {
+        var completed = 0
+        rule.setContent {
+            MaterialTheme { Column(Modifier.verticalScroll(rememberScrollState())) {
+                FirstUseGuide(false, false, false, { completed++ }, {}, {}, {}, {}, isUpdate = true, fullTour = false)
+            } }
+        }
+        rule.onNodeWithText("What's new").assertExists()
+        rule.onNodeWithText("Next").assertDoesNotExist()
+        rule.onNodeWithText("Skip for now").performScrollTo().performClick()
+        rule.runOnIdle { assertEquals(1, completed) }
+    }
+
     @Test fun tour_can_advance_go_back_and_skip_without_starting_setup() {
         var completed = 0
         var setupActions = 0

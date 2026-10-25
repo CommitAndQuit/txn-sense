@@ -35,7 +35,8 @@ class CategoryActivityPresentationUiTest {
             rule.onNodeWithText("Your share · Food").assertDoesNotExist()
             // The active filter chip remains discoverable; only the duplicate
             // dashboard was removed, not the user's category/direction filter.
-            rule.onNode(hasText("Money out · Food") and hasClickAction()).assertIsDisplayed()
+            rule.onNode(hasText("Money out") and hasClickAction()).assertIsDisplayed()
+            rule.onNodeWithContentDescription("Remove category filter Food").assertIsDisplayed()
             rule.onNodeWithText("Totals").performClick()
             rule.onNode(hasText("Money out") and hasText("₹900") and hasAnyAncestor(isDialog())).assertIsDisplayed()
             rule.onNode(hasText("Your spending") and hasText("₹300") and hasAnyAncestor(isDialog())).assertIsDisplayed()

@@ -27,10 +27,10 @@ class CategoryAndBatchUiTest {
             rule.openAdvancedFilters()
             rule.onNodeWithText("Select transactions").performScrollTo().performClick()
             rule.onNodeWithText("Select transactions").assertDoesNotExist()
-            rule.waitUntil(15000) { rule.onAllNodesWithContentDescription("Select Batch first").fetchSemanticsNodes().isNotEmpty() }
+            // Lazy rows below the viewport are not composed until scrolled into
+            // view. Selection adds controls above the list on compact phones.
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Select Batch first"))
             rule.onNodeWithContentDescription("Select Batch first").performClick()
-            rule.waitUntil(15000) { rule.onAllNodesWithContentDescription("Select Batch second").fetchSemanticsNodes().isNotEmpty() }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Select Batch second"))
             rule.onNodeWithContentDescription("Select Batch second").performClick()
             rule.onNodeWithText("Category").performClick()

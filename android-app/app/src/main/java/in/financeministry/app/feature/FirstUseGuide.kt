@@ -49,27 +49,32 @@ private val tourChapters = listOf(
 @Composable
 fun FirstUseGuide(captureEnabled: Boolean, hasSources: Boolean, reminderEnabled: Boolean,
     onDone: () -> Unit, onAdd: () -> Unit, onOpenSms: () -> Unit, onOpenSources: () -> Unit, onOpenReminder: () -> Unit,
-    isUpdate: Boolean = false, onChapterChanged: () -> Unit = {}) {
+    isUpdate: Boolean = false, onChapterChanged: () -> Unit = {}, fullTour: Boolean = true) {
+    val chapters = when {
+        fullTour -> tourChapters
+        isUpdate -> listOf(TourChapter("What's new", "A quieter Home, clearer category breakdown and easier Activity filters.",
+            "Explore category amounts and percentages in Spending breakdown. Remove individual Activity filters without clearing your search. Quick category correction now offers Remember this category. Your records and accounting are unchanged. Replay the complete App tour in Settings → More settings."))
+        else -> listOf(tourChapters.first(), tourChapters[1], tourChapters.last())
+    }
     var step by rememberSaveable { mutableStateOf(0) }
     var detailsExpanded by rememberSaveable { mutableStateOf(false) }
-    val chapter = tourChapters[step.coerceIn(tourChapters.indices)]
-    val last = step == tourChapters.lastIndex
+    val chapter = chapters[step.coerceIn(chapters.indices)]
+    val last = step >= chapters.lastIndex
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("App tour · ${step + 1} of ${tourChapters.size}", style = MaterialTheme.typography.labelLarge,
+                Text("${if (fullTour) "App tour" else if (isUpdate) "Update summary" else "Quick start"} · ${step + 1} of ${chapters.size}", style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(top = 12.dp))
                 TextButton(onClick = onDone) { Text("Skip for now") }
             }
-            LinearProgressIndicator(progress = { (step + 1).toFloat() / tourChapters.size }, modifier = Modifier.fillMaxWidth())
-            if (step == 0 && isUpdate) Text("After your update · rediscover your tools", style = MaterialTheme.typography.labelMedium)
+            LinearProgressIndicator(progress = { (step + 1).toFloat() / chapters.size }, modifier = Modifier.fillMaxWidth())
             Text(chapter.title, style = MaterialTheme.typography.titleLarge)
             Text(chapter.summary, style = MaterialTheme.typography.bodyMedium)
             TextButton(onClick = { detailsExpanded = !detailsExpanded }, contentPadding = PaddingValues(0.dp)) {
                 Text(if (detailsExpanded) "Less detail" else "More detail")
             }
             if (detailsExpanded) Text(chapter.details, style = MaterialTheme.typography.bodyMedium)
-            if (last) {
+            if (last && (fullTour || !isUpdate)) {
                 Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) { Text("+ Add transaction") }
                 Text("Optional setup", style = MaterialTheme.typography.labelLarge)
                 GuideItem(captureEnabled, "Record supported bank SMS", onOpenSms)

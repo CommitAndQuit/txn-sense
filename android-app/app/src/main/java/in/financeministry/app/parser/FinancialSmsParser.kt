@@ -243,6 +243,6 @@ class RuleBasedFinancialSmsParser {
         counterpartyLabel = null,
         confidence = confidence,
         ruleId = ruleId,
-        parserVersion = 14,
+        parserVersion = 15,
     )
 }

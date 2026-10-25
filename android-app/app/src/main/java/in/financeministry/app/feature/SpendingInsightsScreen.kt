@@ -13,6 +13,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import `in`.financeministry.app.data.*
 import `in`.financeministry.app.money
+import `in`.financeministry.app.ui.SpendingDonut
+import `in`.financeministry.app.ui.spendingCategoryColor
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
@@ -20,9 +22,10 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun SpendingInsightsScreen(repository: TransactionRepository, month: LocalDate, onBack: () -> Unit,
-    onCategory: (String) -> Unit, onReview: () -> Unit, onBudget: () -> Unit) {
+    onCategory: (String) -> Unit, onReview: () -> Unit, onBudget: () -> Unit,
+    onCategories: (List<String>) -> Unit) {
     val revision by repository.revision.collectAsState()
-    var insight by remember { mutableStateOf<SpendingInsight?>(null) }
+    var insight by remember(month, revision) { mutableStateOf<SpendingInsight?>(null) }
     var error by remember { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
     LaunchedEffect(month, revision, retry) {
@@ -53,6 +56,10 @@ fun SpendingInsightsScreen(repository: TransactionRepository, month: LocalDate, 
                         Spacer(Modifier.height(12.dp))
                         Text(money(data.total), style = MaterialTheme.typography.headlineLarge)
                         Text("Your share of spending", style = MaterialTheme.typography.bodyMedium)
+                        TextButton(onClick = onBudget) { Text("Set a category budget") }
+                    }
+                    item {
+                        SpendingDonut(data.categories, onOpen = onCategories)
                     }
                     item {
                         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
@@ -76,11 +83,17 @@ fun SpendingInsightsScreen(repository: TransactionRepository, month: LocalDate, 
                             verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(item.category, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                                Text(money(item.amount), style = MaterialTheme.typography.titleMedium)
+                                Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
+                                    Text(money(item.amount), style = MaterialTheme.typography.titleMedium)
+                                    Text(if (data.total.signum() == 0) "0%" else
+                                        BigDecimal(item.amount).multiply(BigDecimal(100)).divide(BigDecimal(data.total), 0, RoundingMode.HALF_UP).toPlainString() + "%",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                             LinearProgressIndicator(progress = { if (data.total.signum() == 0) 0f else
                                 BigDecimal(item.amount).divide(BigDecimal(data.total), 5, RoundingMode.HALF_UP).toFloat().coerceIn(0f, 1f) },
-                                modifier = Modifier.fillMaxWidth().height(3.dp))
+                                modifier = Modifier.fillMaxWidth().height(6.dp), color = spendingCategoryColor(item.category),
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant)
                             if (item.category == "Other") Text("Review uncategorized payments →", style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary)
                         }
@@ -91,7 +104,6 @@ fun SpendingInsightsScreen(repository: TransactionRepository, month: LocalDate, 
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Personal, family and gifts count fully; group payments count only your share.",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        OutlinedButton(onClick = onBudget, modifier = Modifier.fillMaxWidth()) { Text("Set a category budget") }
                         TextButton(onClick = onReview) { Text("Review payments excluded from totals") }
                     }
                 }

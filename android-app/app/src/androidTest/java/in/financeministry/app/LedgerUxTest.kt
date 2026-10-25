@@ -118,7 +118,8 @@ class LedgerUxTest {
         rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Still owed to you"))
         rule.onNodeWithText("Still owed to you").assertIsDisplayed()
         rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Open repayments"))
-        rule.onNode(hasContentDescription("Open repayments") and hasText("from this month", substring = true)).assertIsDisplayed()
+        val month = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("MMM"))
+        rule.onNode(hasContentDescription("Open repayments") and hasText("unpaid from $month", substring = true)).assertIsDisplayed()
     }
 
     @Test fun settings_are_separate_and_return_to_home() {
@@ -142,12 +143,18 @@ class LedgerUxTest {
             rule.onNode(hasText("Added manually") and hasAnyAncestor(isDialog())).performScrollTo().performClick()
             rule.onNodeWithText("Show transactions").performClick()
             rule.waitUntil(15000) { rule.onAllNodesWithText("Added manually").fetchSemanticsNodes().isNotEmpty() }
-            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Added manually"))
-            rule.onNodeWithText("Added manually").assertIsDisplayed().performClick()
+            openFilters()
+            rule.onNode(hasText("Added manually") and hasAnyAncestor(isDialog())).performScrollTo().assertIsSelected()
             rule.onNodeWithText("Show transactions").performClick()
             val transactionRow = hasText("₹71.23") and hasClickAction()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(transactionRow)
             rule.onNode(transactionRow).assertIsDisplayed()
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Remove activity filter Added manually"))
+            rule.onNodeWithContentDescription("Remove activity filter Added manually").performClick()
+            rule.onNodeWithContentDescription("Remove activity filter Added manually").assertDoesNotExist()
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(transactionRow)
+            rule.onNode(transactionRow).assertIsDisplayed()
+            assertTrue(runBlocking { repository.get(id) } != null)
         } finally { runBlocking { repository.delete(id) } }
     }
 

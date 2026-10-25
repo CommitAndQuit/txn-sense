@@ -18,11 +18,11 @@ import java.util.UUID
 /** Pending records never enter totals; dismissal retains evidence and can be reversed. */
 class PublicReviewUiTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
-    private fun seed(): Pair<TransactionRepository, TransactionEntity> {
+    private fun seed(status: String = "Successful", channel: String = "Card", type: String = "MerchantPayment"): Pair<TransactionRepository, TransactionEntity> {
         val r=TransactionRepository(ApplicationProvider.getApplicationContext<Application>(), "public_review_${UUID.randomUUID()}")
         val now=System.currentTimeMillis()
         val row=TransactionEntity("uncertain", sourceType="SMS", sourceTimestamp=now, effectiveTimestamp=now,
-            amountMinor=47000, direction="Debit", status="Successful", channel="Card", transactionType="MerchantPayment",
+            amountMinor=47000, direction="Debit", status=status, channel=channel, transactionType=type,
             counterpartyLabel="Card payment", reviewState="NeedsReview", createdAt=now, updatedAt=now)
         runBlocking {r.withLedger {it.transactions().insert(row)}}
         r.preferences.edit().putBoolean("onboarding_complete",true).putInt("app_tour_seen_version",BuildConfig.VERSION_CODE).commit()
@@ -32,6 +32,67 @@ class PublicReviewUiTest {
         rule.onNodeWithContentDescription("Open review tab").performClick()
         return r to row
     }
+    @Test fun pending_status_can_be_corrected_without_opening_advanced_details() {
+        val (r, row) = seed(status = "Pending")
+        try {
+            rule.onNodeWithText("Check & confirm").performScrollTo().performClick()
+            rule.onNodeWithText("Check payment status").assertIsDisplayed()
+            rule.onNodeWithText("Pending").performClick()
+            rule.onNodeWithText("Successful").performClick()
+            rule.onNodeWithText("Confirm payment").performClick()
+            rule.waitUntil(15000) { runBlocking { r.get(row.id)?.reviewState == "Confirmed" } }
+            assertEquals("Successful", runBlocking { r.get(row.id)!!.status })
+            assertEquals(47000L, runBlocking { r.snapshot().debit.toLong() })
+        } finally { runBlocking { r.eraseAll(); r.close() } }
+    }
+
+    @Test fun uncertain_method_and_type_are_correctable_before_optional_details() {
+        val (r, row) = seed(channel = "Unknown", type = "Unknown")
+        try {
+            rule.onNodeWithText("Check & confirm").performScrollTo().performClick()
+            rule.onNodeWithText("Check payment method").assertIsDisplayed()
+            rule.onAllNodesWithText("Not identified")[0].performClick()
+            rule.onNodeWithText("UPI").performClick()
+            rule.onNodeWithText("Check payment kind").performScrollTo().assertIsDisplayed()
+            rule.onNodeWithText("Not identified").performClick()
+            rule.onNodeWithText("Purchase").performClick()
+            rule.onNodeWithText("Confirm payment").performClick()
+            rule.waitUntil(15000) { runBlocking { r.get(row.id)?.reviewState == "Confirmed" } }
+            val saved = runBlocking { r.get(row.id)!! }
+            assertEquals("UPI", saved.channel)
+            assertEquals("MerchantPayment", saved.transactionType)
+            assertEquals(47000L, runBlocking { r.snapshot().debit.toLong() })
+        } finally { runBlocking { r.eraseAll(); r.close() } }
+    }
+
+    @Test fun missing_payment_from_review_opens_manual_entry_without_confirming_existing_record() {
+        val (r, row) = seed()
+        try {
+            rule.onNodeWithText("Missing a payment?").performClick()
+            rule.onNodeWithText("Add a payment manually").performClick()
+            rule.onNode(hasText("Add payment") and hasClickAction()).assertExists()
+            assertEquals("NeedsReview", runBlocking { r.get(row.id)!!.reviewState })
+            assertEquals(1, runBlocking { r.snapshot().rows.size })
+        } finally { runBlocking { r.eraseAll(); r.close() } }
+    }
+
+    @Test fun activity_recovery_routes_to_diagnostics_and_opt_in_import_without_mutation() {
+        val (r, row) = seed()
+        try {
+            rule.onNodeWithContentDescription("Open activity").performClick()
+            rule.onNodeWithText("Missing a payment?").performClick()
+            rule.onNodeWithText("Check SMS capture").performScrollTo().performClick()
+            rule.onNodeWithText("Permission and capture status on this device.").assertExists()
+            rule.onNodeWithContentDescription("Close settings").performClick()
+            rule.onNodeWithText("Missing a payment?").performClick()
+            rule.onNodeWithText("Import past messages").performScrollTo().performClick()
+            rule.onNodeWithText("Past transactions").assertExists()
+            rule.onNodeWithText("Import last 3 months").assertExists()
+            assertEquals("NeedsReview", runBlocking { r.get(row.id)!!.reviewState })
+            assertEquals(1, runBlocking { r.snapshot().rows.size })
+        } finally { runBlocking { r.eraseAll(); r.close() } }
+    }
+
     @Test fun actionable_review_confirms_one_payment_and_updates_totals_once() {
         val (r,row)=seed()
         try {

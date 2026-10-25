@@ -27,7 +27,8 @@ data class LedgerSnapshot(val rows: List<TransactionEntity>, val debit: BigInteg
     val reversedOriginalIds: Set<String> = emptySet(),
     val resultCount: Long = 0, val resultDebit: BigInteger = BigInteger.ZERO,
     val resultCredit: BigInteger = BigInteger.ZERO,
-    val resultPersonalSpend: BigInteger = BigInteger.ZERO)
+    val resultPersonalSpend: BigInteger = BigInteger.ZERO,
+    val spendingCategories: List<CategorySpending> = emptyList())
 
 /** All mutation, capture and erasure share one gate. No raw source is stored. */
 class TransactionRepository(private val context: Context, private val namespace: String = "finance") {
@@ -106,7 +107,10 @@ class TransactionRepository(private val context: Context, private val namespace:
             eligibleDebits.filter { it.ownership in listOf("ForOther", "Group") }
                 .fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf(owed(row)) }, month, reversedOriginals,
             resultTotals.count, BigInteger.valueOf(resultTotals.debit), BigInteger.valueOf(resultTotals.credit),
-            BigInteger.valueOf(resultTotals.personalSpend))
+            BigInteger.valueOf(resultTotals.personalSpend),
+            eligibleDebits.groupBy { it.category }.map { (category, items) ->
+                CategorySpending(category, items.fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf(personal(row)) }, items.map { it.id })
+            })
     }
 
     suspend fun reviewCount(): Int = locked {

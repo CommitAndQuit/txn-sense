@@ -117,7 +117,7 @@ suspend fun TransactionRepository.editRepayment(id: String, amount: String, rece
     revision.value++
 }
 
-private fun updateRepaymentAggregate(dao: TransactionDao, expense: TransactionEntity, now: Long) {
+internal fun updateRepaymentAggregate(dao: TransactionDao, expense: TransactionEntity, now: Long) {
     val total = dao.repaymentsFor(expense.id).fold(0L) { n, r -> Math.addExact(n, r.amountMinor) }
     dao.update(expense.copy(repaidMinor = total, isUserCorrected = true, updatedAt = now))
     dao.audit(listOf(CorrectionEntity(UUID.randomUUID().toString(), expense.id, now,

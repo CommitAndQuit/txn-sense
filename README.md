@@ -6,7 +6,7 @@ An Android expense tracker that records transactions from incoming SMS and lets 
 
 **Status: early alpha.** The release channel is for installable **debug APKs** for testing. The app is being developed by one maintainer and is not ready for general use. Parsing can miss or misclassify transactions; check your records. Do not make this your only financial record.
 
-This source targets **v0.1.0-alpha.25**. Check
+This source targets **v0.1.0-alpha.26**. Check
 [GitHub Releases](https://github.com/hk121902-stack/finance-ministry/releases)
 for published downloads; a local build is not an official APK.
 Download the debug APK from its assets. The release includes its SHA-256 checksum,
@@ -14,14 +14,58 @@ signing-certificate details, and license notices. Physical-device testing is pen
 
 ## What works today
 
+### Alpha.26 changes
+
+The working source keeps Home focused on spending totals, with the top
+three categories and one breakdown action. Spending breakdown keeps the selectable
+donut and ranked percentage bars. Charts use existing personal-share amounts,
+not gross group payments, money received or repayments. The five leading categories
+remain separate; smaller categories are grouped for display and can be opened together.
+Text labels provide an alternative to selecting detailed chart segments. Home has
+no chart; the detailed chart moves its summary below the ring for large text or
+long labels and amounts. These changes are not part of the
+published alpha.25 release and do not change ledger accounting.
+
+Activity and Review include **Missing a payment?** with explicit routes to manual
+entry, capture diagnostics and the existing three-month import preview. Opening
+this help does not scan SMS or change the ledger. Check dates, filters and Review
+before adding a manual entry to avoid double counting. Category budgets are also
+accessible near the top of Spending breakdown.
+
+Review editing brings uncertain status, payment method and payment kind to the
+top of the form, with the reason the alert needs checking. Pending payments are
+not assumed successful; corrections still require explicit confirmation and the
+existing validation checks.
+
+Activity now shows individually removable filter chips; removing one keeps the
+other filters and search. Quick category correction exposes the optional merchant
+category rule without opening advanced details. First launch uses three skippable
+quick-start steps; updates show a short change summary, while Settings retains the
+complete App tour. None of these actions automatically enables SMS or notifications.
+
+People also offers **Settle multiple expenses** for a named balance with more than
+one unpaid expense. Select expenses, preview an oldest-first allocation, then
+confirm one recorded receipt or one new cash receipt. The save is atomic and checks
+for changed balances. **Undo settlement** unlinks the last batch in the current
+People session but keeps the received payment in Activity; individual links can
+still be managed in each expense's repayment history after reopening the app.
+This introduces no database schema change.
+
+People shows repayment progress as received, expected and remaining amounts.
+The selected-month breakdown follows expenses created that month, not the month
+in which repayments arrived. Parser version 15 also handles bounded variations
+of ICICI dispute footers and Federal One Credit Card refund detail instructions.
+Synthetic regression results are not a substitute for independent real-device
+and human-labelled parser validation.
+
 This guide describes the current source. Alpha.25 adds optional on-demand original
 SMS viewing without storing messages. It includes alpha.24's shared SMS layouts,
 safe historical-import repairs and optional Home permission setup. Check Releases for published builds and the
 changelog for version-specific changes.
 
-- Explore a skippable, twelve-chapter **App tour** on first launch and once after
-  each update. Back/Next and optional More detail explain all current features;
-  replay it from Settings. Finishing or skipping stops repeat prompts for that
+- Explore three skippable quick-start steps on first launch and a short summary
+  after updates. Replay the full **App tour** from Settings. Back/Next and optional
+  More detail explain current features. Finishing or skipping stops repeat prompts for that
   version. Optional setup never grants permissions or enables capture by itself.
 - Capture new financial SMS after you explicitly enable SMS access.
 - After the tour, use Home's optional **Enable SMS** and **Enable notifications**

@@ -97,6 +97,27 @@ class PublicFiltersUiTest {
     }
     private fun cleanup(r: TransactionRepository) = runBlocking { r.eraseAll(); r.close() }
 
+    @Test fun removing_one_category_keeps_search_and_direction_and_other_categories() {
+        val r = repository()
+        try {
+            show(r)
+            rule.onNodeWithText("Search your transactions").performTextInput("Needle")
+            rule.onNode(hasSetTextAction() and hasText("Needle")).performImeAction()
+            rule.onNode(hasText("Money out") and isSelectable()).performClick()
+            openFilters()
+            rule.onNodeWithContentDescription("Choose filter categories").performClick()
+            chooseCategory("Food"); chooseCategory("Travel")
+            rule.onNodeWithText("Show transactions").performClick()
+            rule.onNodeWithContentDescription("Remove category filter Food").performClick()
+            rule.waitUntil(15000) { rule.onAllNodesWithText("1 transaction").fetchSemanticsNodes().isNotEmpty() }
+            rule.onNodeWithContentDescription("Remove category filter Travel").assertExists()
+            rule.onNode(hasText("Money out") and isSelectable()).assertIsSelected()
+            rule.onNode(hasSetTextAction() and hasText("Needle")).assertExists()
+            rule.onNodeWithText("Needle travel").assertExists()
+            assertUnchanged(r)
+        } finally { cleanup(r) }
+    }
+
     @Test fun category_filter_keeps_header_and_apply_visible_when_the_category_list_scrolls() {
         val r = repository()
         try {

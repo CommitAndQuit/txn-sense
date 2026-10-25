@@ -90,6 +90,13 @@ class PublicEditorPresentationUiTest {
         assertEquals(row, runBlocking { r.get(row.id) })
     }
 
+    @Test fun remember_category_is_available_without_opening_advanced_details() = withQuickEditor { r, row ->
+        rule.onNodeWithText("Remember this category for future payments").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Advanced details").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Close transaction editor").performClick()
+        assertEquals(row, runBlocking { r.get(row.id) })
+    }
+
     // Heading, Close and Save must remain reachable at the last advanced field.
     @Test fun editor_heading_close_and_save_stay_reachable_when_advanced_fields_scroll() = withQuickEditor { r, row ->
         rule.onNodeWithText("More details").performScrollTo().performClick()

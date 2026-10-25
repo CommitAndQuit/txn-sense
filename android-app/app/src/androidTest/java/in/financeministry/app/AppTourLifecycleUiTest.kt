@@ -37,8 +37,8 @@ class AppTourLifecycleUiTest {
                 repository.preferences.edit().putInt(APP_TOUR_VERSION_KEY, BuildConfig.VERSION_CODE - 1).commit()
                 launch.intValue++
             }
-            rule.onNodeWithText("Your private ledger").assertIsDisplayed()
-            rule.onNodeWithText("After your update · rediscover your tools").assertIsDisplayed()
+            rule.onNodeWithText("What's new").assertIsDisplayed()
+            rule.onNodeWithText("Your private ledger").assertDoesNotExist()
             rule.onNodeWithText("Skip for now").performClick()
             rule.onNodeWithContentDescription("Open activity").performClick()
             rule.onNodeWithContentDescription("Open review tab").performClick()

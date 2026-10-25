@@ -5,18 +5,26 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import `in`.financeministry.app.data.*
+import `in`.financeministry.app.money
+import kotlin.math.roundToInt
 import java.math.BigInteger
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+
+fun spendingPeriodLabel(month: LocalDate, today: LocalDate = LocalDate.now()): String =
+    if (month.withDayOfMonth(1) == today.withDayOfMonth(1)) "This month · your spending"
+    else "${month.format(DateTimeFormatter.ofPattern("MMM uuuu"))} · your spending"
 
 @Composable
 fun LedgerMonthButton(label:String,onClick:()->Unit) {
@@ -26,37 +34,50 @@ fun LedgerMonthButton(label:String,onClick:()->Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LedgerHomeSummary(snapshot:LedgerSnapshot,owedCountLabel:String,onMonth:()->Unit,onBreakdown:()->Unit,onPeople:()->Unit) {
     val colors=MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().padding(top=8.dp,bottom=19.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(top=4.dp,bottom=8.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
         LedgerMonthButton(snapshot.selectedMonth.format(DateTimeFormatter.ofPattern("MMMM uuuu")),onMonth)
         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
             LedgerIcon("lock",Modifier.size(13.dp),colors.onSurfaceVariant)
             Text("Only on your phone",style=MaterialTheme.typography.labelSmall,color=colors.onSurfaceVariant)
         }
     }
-    Text("Your spending",style=MaterialTheme.typography.bodyMedium,color=colors.onSurfaceVariant)
-    LedgerAmount(snapshot.personalSpend,Modifier.padding(top=5.dp))
-    Row(Modifier.fillMaxWidth().padding(top=9.dp,bottom=20.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-        Text("Personal, family & your group share",Modifier.weight(1f),style=MaterialTheme.typography.bodySmall,color=colors.onSurfaceVariant)
-        TextButton(onClick=onBreakdown,modifier=Modifier.semantics {contentDescription="How totals work"},contentPadding=PaddingValues(0.dp)) {
-            Text("Breakdown",style=MaterialTheme.typography.labelMedium);Spacer(Modifier.width(4.dp));LedgerIcon("arrow",Modifier.size(15.dp))
+    val slices = remember(snapshot.spendingCategories) { spendingChartSlices(snapshot.spendingCategories) }
+    Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+        Text("Your spending",style=MaterialTheme.typography.bodyMedium,color=colors.onSurfaceVariant)
+        Text(money(snapshot.personalSpend),style=MaterialTheme.typography.headlineMedium.copy(fontFeatureSettings="tnum"))
+        Text(spendingPeriodLabel(snapshot.selectedMonth),style=MaterialTheme.typography.bodySmall,color=colors.onSurfaceVariant)
+    }
+    if (slices.isNotEmpty()) FlowRow(Modifier.fillMaxWidth().padding(top=8.dp),
+        horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+        slices.take(3).forEach { slice ->
+            Row(verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(5.dp),
+                modifier=Modifier.semantics(mergeDescendants=true) {}) {
+                Box(Modifier.size(7.dp).background(spendingCategoryColor(slice.label), CircleShape))
+                Text("${slice.label} ${(slice.fraction * 100).roundToInt()}%",style=MaterialTheme.typography.bodySmall,
+                    color=colors.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
+            }
         }
+    }
+    TextButton(onClick=onBreakdown,modifier=Modifier.heightIn(min=48.dp).semantics {contentDescription="How totals work"},contentPadding=PaddingValues(0.dp)) {
+        Text("Spending breakdown",style=MaterialTheme.typography.labelMedium);Spacer(Modifier.width(4.dp));LedgerIcon("arrow",Modifier.size(15.dp))
     }
     Row(Modifier.fillMaxWidth().background(colors.surfaceContainer,RoundedCornerShape(17.dp)).padding(horizontal=16.dp,vertical=15.dp)) {
         FlowMetric("Money out","out",snapshot.debit,Modifier.weight(1f))
         VerticalDivider(Modifier.height(45.dp),color=colors.outlineVariant)
         FlowMetric("Money in","incoming",snapshot.credit,Modifier.weight(1f).padding(start=20.dp))
     }
-    Row(Modifier.fillMaxWidth().padding(top=14.dp).clickable(onClick=onPeople).semantics {contentDescription="Open repayments"}
-        .padding(vertical=14.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(top=4.dp).clickable(onClick=onPeople).semantics {contentDescription="Open repayments"}
+        .padding(vertical=12.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
         Box(Modifier.size(39.dp).background(colors.secondaryContainer,RoundedCornerShape(13.dp)),contentAlignment=Alignment.Center) {
             LedgerIcon("people",tint=colors.primary)
         }
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
             Text("Still owed to you",style=MaterialTheme.typography.labelLarge.copy(fontSize=13.sp))
-            Text("${compactMoney(snapshot.selectedMonthOutstandingRepayments)} from this month · $owedCountLabel",
+            Text("${compactMoney(snapshot.selectedMonthOutstandingRepayments)} unpaid from ${snapshot.selectedMonth.format(DateTimeFormatter.ofPattern("MMM"))} · $owedCountLabel",
                 style=MaterialTheme.typography.labelSmall,color=colors.onSurfaceVariant)
         }
         Text(compactMoney(snapshot.outstandingRepayments),style=MaterialTheme.typography.titleMedium.copy(fontSize=19.sp,fontFeatureSettings="tnum"))
