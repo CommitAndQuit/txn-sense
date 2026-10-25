@@ -10,7 +10,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import `in`.financeministry.app.core.model.*
@@ -74,28 +74,30 @@ class RepaymentFlowUiTest {
         // The real IME and dialog-window resize are driven by Android, not the
         // Compose test clock. A tap using a moving footer's old coordinates can
         // miss Save even though its semantics is enabled. Wait for observable
-        // native bounds to settle; never retry the save or invoke its callback.
+        // native bounds to settle above the visible IME; never retry the save
+        // or invoke its callback. Read semantics before native bounds because
+        // fetching semantics can itself synchronize a pending Compose frame.
         var previousBounds: Pair<androidx.compose.ui.geometry.Rect, android.graphics.Rect>? = null
         var lastMovementAt = android.os.SystemClock.elapsedRealtime()
         var movements = 0
         rule.waitUntil(10000) {
+            val buttonBounds = rule.onNode((hasText("Confirm & link repayment") or hasText("Record cash repayment") or hasText("Save repayment")) and hasClickAction())
+                .fetchSemanticsNode().boundsInWindow
             val ime = automation.windows.firstOrNull { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
             if (ime == null) false else {
                 val imeBounds = android.graphics.Rect().also(ime::getBoundsInScreen)
-                val buttonBounds = rule.onNode((hasText("Confirm & link repayment") or hasText("Record cash repayment") or hasText("Save repayment")) and hasClickAction())
-                    .fetchSemanticsNode().boundsInWindow
                 val current = buttonBounds to imeBounds
                 val now = android.os.SystemClock.elapsedRealtime()
                 if (current != previousBounds) {
                     previousBounds = current; lastMovementAt = now; movements++; false
-                } else now - lastMovementAt >= 200
+                } else buttonBounds.bottom <= imeBounds.top && now - lastMovementAt >= 200
             }
         }
         println("Repayment native footer/IME bounds settled after $movements observed positions: $previousBounds")
-        val keyboard = android.graphics.Rect()
-        automation.windows.first { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }.getBoundsInScreen(keyboard)
-        val save = rule.onNode((hasText("Confirm & link repayment") or hasText("Record cash repayment") or hasText("Save repayment")) and hasClickAction()).fetchSemanticsNode().boundsInWindow
-        assertTrue("Save overlaps the visible keyboard", save.bottom <= keyboard.top)
+        // Assert the coherent, stable pair just observed, not two new readings
+        // from different native/Compose frames after the readiness check.
+        val (save, keyboard) = requireNotNull(previousBounds)
+        assertTrue("Save overlaps the visible keyboard: save=$save keyboard=$keyboard", save.bottom <= keyboard.top)
     }
 
     // Merely presenting or selecting a possible match must never mutate the ledger.
@@ -195,7 +197,10 @@ class RepaymentFlowUiTest {
             rule.onNodeWithText("Repayment exceeds the amount still owed.").assertIsDisplayed()
             capture("cash-overpayment-keyboard.png")
             assertTrue(runBlocking { repo.repaymentsFor(id).isEmpty() })
-            rule.onNode(editableLedgerField("Repayment amount (INR)")).performTextReplacement("500")
+            // Saving temporarily disables the field and may dismiss the IME.
+            // A real user taps the amount again before correcting it. Semantics
+            // replacement alone can edit an unfocused field against stale IME bounds.
+            rule.onNode(editableLedgerField("Repayment amount (INR)")).performClick().performTextReplacement("500")
             assertSaveAboveKeyboard()
             rule.onNodeWithText("Record cash repayment").assertIsDisplayed().assertIsEnabled().performClick()
             rule.waitUntil(15000) { runBlocking { repo.repaymentsFor(id).size == 1 } }
