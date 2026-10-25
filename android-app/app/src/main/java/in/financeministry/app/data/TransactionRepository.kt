@@ -187,6 +187,37 @@ class TransactionRepository(private val context: Context, private val namespace:
         context.checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
 
     fun historyPermissionGranted(): Boolean = context.checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+
+    /** Exact, on-demand inbox lookup. No SMS body, sender or inbox ID is persisted. */
+    suspend fun originalSms(id: String, source: HistoricalSmsSource? = null): OriginalSmsResult = withContext(Dispatchers.IO) {
+        try {
+            val request = locked {
+                val row = if (database != null || context.getDatabasePath(dbName).exists()) db().transactions().get(id) else null
+                row?.let { it to eraseGeneration.value }
+            } ?: return@withContext OriginalSmsResult.Unavailable
+            val (row, generation) = request
+            // Never hold the ledger mutation gate while querying an external provider.
+            val lookup = OriginalSmsLookup { sender, timestamp, body -> locked {
+                // A delayed query must not recreate a key after erasure.
+                check(eraseGeneration.value == generation)
+                secrets.hmacSource(sender, timestamp, body)
+            } }
+            val result = lookup.find(row, source ?: AndroidOriginalSmsSource(context), ::historyPermissionGranted)
+            locked {
+                if (eraseGeneration.value != generation) OriginalSmsResult.Unavailable
+                else if (!historyPermissionGranted()) OriginalSmsResult.PermissionRequired
+                else {
+                    val current = db().transactions().get(id)
+                    if (current?.sourceType == "SMS" && current.sourceTimestamp == row.sourceTimestamp &&
+                        current.sourceFingerprint?.contentEquals(row.sourceFingerprint) == true) result
+                    else OriginalSmsResult.Unavailable
+                }
+            }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (_: SecurityException) { OriginalSmsResult.PermissionRequired }
+        catch (_: Exception) { OriginalSmsResult.Unavailable }
+    }
+
     suspend fun restoredHistoryNeedsReview(): Boolean = locked {
         (database != null || context.getDatabasePath(dbName).exists()) && db().transactions().metadata("foreign_restore") == "true"
     }

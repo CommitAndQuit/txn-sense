@@ -341,7 +341,10 @@ Suggested rationale:
 > The core feature is an automated personal spending ledger created from supported
 > financial SMS alerts. RECEIVE_SMS supports user-enabled new-alert recording;
 > READ_SMS supports a separately consented, user-initiated last-three-month inbox
-> import with preview, confirmation and undo. Processing and filtering happen on-device.
+> import with preview, confirmation and undo, and an on-demand original-message
+> view opened from an SMS transaction. Viewing queries the original received or sent
+> timestamp and shows only a unique device-keyed fingerprint match in unsaved memory;
+> closing or backgrounding clears it. Processing and filtering happen on-device.
 > Raw message bodies and sender strings are not retained in the ledger or uploaded.
 > The app never sends SMS or initiates financial transactions. Users may decline
 > permissions and use manual entry; that fallback does not reproduce automatic capture
@@ -350,7 +353,8 @@ Suggested rationale:
 
 Supply a fresh demo from the exact candidate showing disclosure before each prompt,
 permission denial/manual fallback, a synthetic eligible alert, uncertain-message review,
-historical import preview/confirmation/repeat deduplication, pause and erasure. Do not
+historical import preview/confirmation/repeat deduplication, original-message viewing
+and clearing on close/background, pause and erasure. Do not
 submit private inbox footage. Ensure the listing prominently describes SMS-based
 money management. Google's [permitted-use table](https://support.google.com/googleplay/android-developer/answer/10208820?hl=en)
 includes this exception but does not grant automatic approval. If rejected, do not

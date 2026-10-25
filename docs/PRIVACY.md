@@ -1,6 +1,6 @@
 # Privacy and data handling
 
-Updated 20 October 2026. Finance Ministry is an independent app
+Updated 24 October 2026. Finance Ministry is an independent app
 maintained by hk121902-stack, not a government service or a bank. Support is
 available at [financeministrysupport@gmail.com](mailto:financeministrysupport@gmail.com);
 share synthetic examples only. Use the private reporting route in SECURITY.md
@@ -19,13 +19,25 @@ them on-device and rejects OTP/verification and non-transaction messages. It doe
 request `SEND_SMS`, contacts, notification-listener access or Internet.
 
 From alpha.5, builds also offer optional `READ_SMS` access, requested only after
-a separate historical-import disclosure. Android grants broad inbox access; the app
+a separate disclosure. Android grants broad inbox access; historical import
 queries only the last three calendar months and filters messages locally. The preview
 keeps normalized financial fields in memory until confirmation, cancellation or leaving
 Settings. Import saves those fields and batch metadata, never raw messages or senders.
 It does not change your phone's SMS or send individual import notifications. Undo removes
 untouched records in a batch and preserves user edits. Erase all clears import previews
 and invalidates scans. Alpha.4 and earlier do not include this permission or feature.
+
+The current source also offers **View original SMS** in payment details for SMS-derived
+records. Only after a tap, it searches the inbox for the original received or sent
+timestamp, and verifies a unique match using the existing device-keyed
+fingerprint. It does not guess using the amount or recipient. Raw text and sender are
+displayed in temporary, unsaved screen memory only; closing, backgrounding or leaving
+the view drops the result and cancels pending lookup. The viewer uses Android's secure
+window flag to restrict screenshots and has no copy, share or export action. No SMS,
+sender or inbox identifier is added to the ledger, preferences, backups or logs. Missing
+permission, deleted/unmatched messages and ambiguous matches have safe fallbacks.
+Restored records from another installation may not match because keys are device-local.
+Viewing never marks a message read, changes it, imports a transaction or enables capture.
 
 `POST_NOTIFICATIONS` is separate. Disabling notifications does not disable otherwise
 authorized capture. Manual entry works without either permission. The in-app capture

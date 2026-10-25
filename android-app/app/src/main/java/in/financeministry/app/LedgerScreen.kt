@@ -781,6 +781,7 @@ private fun LedgerContent(repository: TransactionRepository, request: Pair<Strin
         } else Text(friendly(row.reviewState), style = MaterialTheme.typography.bodySmall)
         Text(transactionTime(row.effectiveTimestamp))
         if (row.sourceType == "SMS" && !row.isUserCorrected) Text("Date from the SMS record’s timestamp, not the date written in its text. If the date is wrong, Edit lets you correct it.", style = MaterialTheme.typography.bodySmall)
+        `in`.financeministry.app.feature.OriginalSmsAction(repository, row)
         row.linkedOriginalId?.let { originalId ->
             TextButton(onClick = { selected = null; selectedId = originalId }) { Text("View linked original transaction") }
             Text("Linked by matching reference, account, channel and full amount.", style = MaterialTheme.typography.bodySmall)

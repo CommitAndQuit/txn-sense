@@ -4,6 +4,16 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.1.0-alpha.25
+
+- Add **View original SMS** to SMS transaction details. Read an exact, unique
+  fingerprint match from the phone's inbox only when requested; never store the
+  message, sender or inbox ID. Optional inbox access has its own disclosure.
+  Unsaved message state clears on close, backgrounding, record changes or erasure;
+  Android's secure dialog flag restricts screenshots. Missing permission, deleted
+  messages, ambiguous matches and foreign-restored fingerprints fail safely.
+  No transaction, total, import, capture or database-schema change.
+
 ## 0.1.0-alpha.24
 
 - Add a clickable Home setup card for missing SMS and recording-notification

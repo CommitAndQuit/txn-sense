@@ -19,13 +19,13 @@ fun PrivacyPanel(onErase: () -> Unit, busy: Boolean) {
         catch (_: Exception) { error = "No browser available. Visit $PUBLIC_PRIVACY_URL or email $SUPPORT_EMAIL." }
     }
     Text("Privacy and support", style = MaterialTheme.typography.titleMedium)
-    Text("Finance Ministry is an independent app, not a government service or bank. Maintained by hk121902-stack. Policy updated 20 October 2026.")
+    Text("Finance Ministry is an independent app, not a government service or bank. Maintained by hk121902-stack. Policy updated 24 October 2026.")
     TextButton(onClick = { open(PUBLIC_PRIVACY_URL) }) { Text("Open online privacy policy") }
     error?.let { SelectionContainer { Text(it, color = MaterialTheme.colorScheme.error) } }
     Text("Local processing", style = MaterialTheme.typography.titleSmall)
     Text("No sign-up, app backend, advertising or analytics. The app has no Internet permission and cannot initiate payments. Optional SMS permissions are requested only after disclosure. Android delivers incoming messages broadly; filtering happens on your device. OTPs and non-transaction messages are rejected, but parsing can be wrong. Review and correct your ledger.")
     Text("Optional permissions", style = MaterialTheme.typography.titleSmall)
-    Text("RECEIVE_SMS captures new alerts. READ_SMS imports the last three calendar months after a separate disclosure and preview. Import never changes or sends your messages. Normalized preview data stays in memory until confirmation or cancellation. Untouched imported records can be undone. POST_NOTIFICATIONS is separate; manual entry works without SMS or notifications. Capture can be paused in settings.")
+    Text("RECEIVE_SMS captures new alerts. READ_SMS optionally imports the last three calendar months after a separate disclosure and preview, or looks up an original SMS when you tap View original SMS in payment details. Android grants broad inbox access; original-message lookup searches for the original received or sent timestamp and displays only a unique fingerprint match. The message and sender stay in temporary, unsaved screen memory and are discarded on closing or leaving the app. Import and viewing never change or send your messages. Normalized import preview data stays in memory until confirmation or cancellation. Untouched imported records can be undone. POST_NOTIFICATIONS is separate; manual entry works without SMS or notifications. Capture can be paused in settings.")
     Text("Stored data", style = MaterialTheme.typography.titleSmall)
     Text("The encrypted database stores amounts, currency, direction, status, categories, dates, masked account hints, parsed recipient labels, source mappings, notes, corrections, parser metadata and local repayment/refund links. Raw SMS bodies, senders and raw transaction references are not stored or uploaded. Device-keyed fingerprints detect repeats. Do not paste OTPs, full account numbers or messages into notes.")
     Text("Security and visibility", style = MaterialTheme.typography.titleSmall)
