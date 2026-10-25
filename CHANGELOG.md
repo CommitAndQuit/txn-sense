@@ -4,6 +4,14 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.1.0-alpha.27
+
+- Simplify the monthly breakdown with one spending total, a compact visual split
+  of your and others' shares, and separate cards for refunds and money still owed.
+- Move detailed accounting notes behind "How it’s calculated". Keep category
+  navigation and refund retry available; stack summary cards at larger text sizes.
+- Accounting calculations, stored records and database schema are unchanged.
+
 ## 0.1.0-alpha.26
 
 - Keep Home compact with a top-category summary; add selectable spending charts

@@ -10,9 +10,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import `in`.financeministry.app.data.*
@@ -109,6 +112,7 @@ fun LedgerHomeSummary(snapshot:LedgerSnapshot,owedCountLabel:String,onMonth:()->
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun MonthlyMathSheet(repository:TransactionRepository,snapshot:LedgerSnapshot,onDismiss:()->Unit,onCategories:()->Unit) {
     val revision by repository.revision.collectAsState()
+    var showCalculation by remember { mutableStateOf(false) }
     var refunds by remember { mutableStateOf<BigInteger?>(null) }
     var refundLoadFailed by remember { mutableStateOf(false) }
     var refundRetry by remember { mutableIntStateOf(0) }
@@ -127,27 +131,66 @@ fun LedgerHomeSummary(snapshot:LedgerSnapshot,owedCountLabel:String,onMonth:()->
                 IconButton(onClick=onDismiss,modifier=Modifier.semantics {contentDescription="Close breakdown"}) {LedgerIcon("close")}
             }
             Column(Modifier.weight(1f,false).verticalScroll(androidx.compose.foundation.rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                Text(snapshot.selectedMonth.format(DateTimeFormatter.ofPattern("MMMM uuuu"))+" · One ledger. Different views of your money.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Your spending",style=MaterialTheme.typography.bodyMedium);LedgerAmount(snapshot.personalSpend)
-                Column(Modifier.background(MaterialTheme.colorScheme.background,RoundedCornerShape(15.dp)).padding(15.dp)) {
-                    MathRow("Recorded money out",compactMoney(snapshot.debit))
-                    MathRow("Less: other people’s shares","− "+compactMoney(snapshot.paidForOthers))
-                    HorizontalDivider();MathRow("Your spending",compactMoney(snapshot.personalSpend))
+                Text(snapshot.selectedMonth.format(DateTimeFormatter.ofPattern("MMMM uuuu")),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background,RoundedCornerShape(18.dp)).padding(18.dp),
+                    verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                    Text("Your spending",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    LedgerAmount(snapshot.personalSpend)
+                    if (snapshot.debit.signum() > 0) {
+                        val personalFraction = java.math.BigDecimal(snapshot.personalSpend).divide(java.math.BigDecimal(snapshot.debit),
+                            6,java.math.RoundingMode.HALF_UP).toFloat().coerceIn(0f,1f)
+                        Row(Modifier.fillMaxWidth().padding(top=8.dp,bottom=6.dp).height(8.dp).clip(RoundedCornerShape(4.dp))
+                            .semantics {contentDescription="Money out split: your spending ${compactMoney(snapshot.personalSpend)}, others’ share ${compactMoney(snapshot.paidForOthers)}"}) {
+                            if (personalFraction > 0f) Box(Modifier.weight(personalFraction).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
+                            if (personalFraction < 1f) Box(Modifier.weight(1f-personalFraction).fillMaxHeight().background(MaterialTheme.colorScheme.outline))
+                        }
+                    }
+                    MonthlyCalculationRow("Money out",compactMoney(snapshot.debit))
+                    MonthlyCalculationRow("Others’ share","− "+compactMoney(snapshot.paidForOthers))
                 }
                 TextButton(onClick=onCategories,contentPadding=PaddingValues(0.dp)) {Text("See spending by category");Spacer(Modifier.width(4.dp));LedgerIcon("arrow",Modifier.size(15.dp))}
-                MathRow("Still owed · all dates",compactMoney(snapshot.outstandingRepayments))
-                Text("Repayments reduce what people owe you. They don’t change your share of the original expense.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                MathRow("Refunds received",refunds?.let(::compactMoney) ?: if (refundLoadFailed) "Unavailable" else "Loading…")
+                if (LocalDensity.current.fontScale > 1.3f) {
+                    MonthlySupplement("Still owed · all dates",compactMoney(snapshot.outstandingRepayments),"people")
+                    MonthlySupplement("Refunds received",refunds?.let(::compactMoney) ?: if (refundLoadFailed) "Unavailable" else "Loading…","incoming")
+                } else Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    MonthlySupplement("Still owed · all dates",compactMoney(snapshot.outstandingRepayments),"people",Modifier.weight(1f))
+                    MonthlySupplement("Refunds received",refunds?.let(::compactMoney) ?: if (refundLoadFailed) "Unavailable" else "Loading…","incoming",Modifier.weight(1f))
+                }
                 if (refundLoadFailed) {
                     Text("Could not load refunds. Your other totals are unchanged.", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error)
                     TextButton(onClick = { refundRetry++ }) { Text("Retry refunds") }
                 }
-                Text("Refunds are included in money in and shown separately from spending. Self transfers, card bill payments and unconfirmed payments are excluded from these totals. SMS dates use the message record’s timestamp unless corrected. This is a recorded ledger, not your bank balance.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick={showCalculation=!showCalculation},contentPadding=PaddingValues(0.dp),
+                    modifier=Modifier.fillMaxWidth().heightIn(min=48.dp).semantics {stateDescription=if(showCalculation) "Expanded" else "Collapsed"}) {
+                    LedgerIcon("info",Modifier.size(17.dp));Spacer(Modifier.width(8.dp))
+                    Text("How it’s calculated",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium)
+                    LedgerIcon(if(showCalculation) "close" else "down",Modifier.size(16.dp))
+                }
+                if (showCalculation) Column(Modifier.fillMaxWidth().padding(bottom=8.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    Text("Your spending = money out − others’ shares.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Repayments reduce what you’re owed. Refunds stay in money in; neither changes your share of an expense.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Self transfers, card bill payments and payments awaiting review are excluded.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("SMS dates use message timestamps unless edited. These are recorded totals, not your bank balance.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             HorizontalDivider()
             Button(onClick=onDismiss,modifier=Modifier.fillMaxWidth().heightIn(min=50.dp).padding(bottom=18.dp)) {Text("Got it")}
         }
+    }
+}
+@Composable private fun MonthlyCalculationRow(label:String,amount:String) {
+    Row(Modifier.fillMaxWidth().semantics(mergeDescendants=true) {}.padding(vertical=4.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+        Text(label,Modifier.weight(1f),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(amount,style=MaterialTheme.typography.labelLarge.copy(fontFeatureSettings="tnum"))
+    }
+}
+@Composable private fun MonthlySupplement(label:String,amount:String,icon:String,modifier:Modifier=Modifier) {
+    Column(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background,RoundedCornerShape(14.dp))
+        .semantics(mergeDescendants=true) {}.padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        LedgerIcon(icon,Modifier.size(18.dp),MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(label,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(amount,style=MaterialTheme.typography.titleMedium.copy(fontFeatureSettings="tnum"))
     }
 }
 @OptIn(ExperimentalMaterial3Api::class)

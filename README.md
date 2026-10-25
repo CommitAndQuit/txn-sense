@@ -6,13 +6,21 @@ An Android expense tracker that records transactions from incoming SMS and lets 
 
 **Status: early alpha.** The release channel is for installable **debug APKs** for testing. The app is being developed by one maintainer and is not ready for general use. Parsing can miss or misclassify transactions; check your records. Do not make this your only financial record.
 
-This source targets **v0.1.0-alpha.26**. Check
+This source targets **v0.1.0-alpha.27**. Check
 [GitHub Releases](https://github.com/hk121902-stack/finance-ministry/releases)
 for published downloads; a local build is not an official APK.
 Download the debug APK from its assets. The release includes its SHA-256 checksum,
 signing-certificate details, and license notices. Physical-device testing is pending.
 
 ## What works today
+
+### Alpha.27 changes
+
+The monthly breakdown shows one spending total with a compact visual split of
+your and others' shares. Refunds and money still owed remain visible in separate
+cards, while accounting explanations open under **How it’s calculated**. Summary
+cards stack at larger text sizes. Category navigation, refund retry and the
+underlying ledger calculations are unchanged.
 
 ### Alpha.26 changes
 
@@ -23,8 +31,8 @@ not gross group payments, money received or repayments. The five leading categor
 remain separate; smaller categories are grouped for display and can be opened together.
 Text labels provide an alternative to selecting detailed chart segments. Home has
 no chart; the detailed chart moves its summary below the ring for large text or
-long labels and amounts. These changes are not part of the
-published alpha.25 release and do not change ledger accounting.
+long labels and amounts. These changes were introduced in alpha.26 and do not
+change ledger accounting.
 
 Activity and Review include **Missing a payment?** with explicit routes to manual
 entry, capture diagnostics and the existing three-month import preview. Opening
