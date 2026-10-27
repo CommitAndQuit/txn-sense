@@ -106,7 +106,6 @@ class MainActivity : ComponentActivity() {
                                 is ScreenState.Detail -> {
                                     `in`.txnsense.app.feature.TransactionDetailScreen(repository, s.id,
                                         onBack = { detailTxn = null },
-                                        onEdit = { request.value = it to true; openSettings = false; showLedger = true },
                                         onOpenTransaction = { detailTxn = it })
                                 }
                                 ScreenState.Home -> {

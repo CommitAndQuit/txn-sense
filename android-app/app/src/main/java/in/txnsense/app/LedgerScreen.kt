@@ -178,40 +178,45 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
             } else if (selected != null) {
                 val row = selected!!
                 Column(Modifier.fillMaxWidth().expandFromRow("txn-${row.id}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(money(row.amountMinor), style = MaterialTheme.typography.headlineSmall)
-                Text("${friendly(row.direction)} · ${friendly(row.status)}")
-                Text("${friendly(row.transactionType)} · ${friendly(row.channel)} · ${friendly(row.sourceType)}")
-                paymentSources.firstOrNull { it.id == row.paymentSourceId }?.let { Text("Payment source: ${it.nickname}${if (it.active) "" else " (inactive)"}", style = MaterialTheme.typography.bodySmall) }
-                if (row.paymentSourceId == null && paymentSources.any { it.active && it.channel == row.channel })
-                    TextButton(onClick = { showSourcePicker = true }) { Text("Choose payment source") }
-                transactionLabels(row)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                row.groupLabel?.let { Text("Group: $it", style = MaterialTheme.typography.bodySmall) }
-                repaymentSummary(row, snapshot?.reversedOriginalIds.orEmpty())?.let { (label, owed) ->
-                    Text("$label: ${money(owed)}", style = MaterialTheme.typography.bodySmall)
-                }
-                if (row.reviewState == "NeedsReview") Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Check this transaction", style = MaterialTheme.typography.titleMedium)
-                        Text(when {
-                            row.amountMinor == null -> "We couldn’t identify a reliable amount. Enter it to finish recording."
-                            row.direction == "Unknown" -> "Choose whether money went out, came in, or moved between accounts."
-                            row.status == "Unknown" -> "Check whether this payment completed before confirming."
-                            else -> "Check the details before including this transaction in your totals."
-                        })
+                    Text(money(row.amountMinor), style = MaterialTheme.typography.headlineSmall)
+                    Text("${friendly(row.direction)} · ${friendly(row.status)}")
+                    Text("${friendly(row.transactionType)} · ${friendly(row.channel)} · ${friendly(row.sourceType)}")
+                    paymentSources.firstOrNull { it.id == row.paymentSourceId }?.let { Text("Payment source: ${it.nickname}${if (it.active) "" else " (inactive)"}", style = MaterialTheme.typography.bodySmall) }
+                    if (row.paymentSourceId == null && paymentSources.any { it.active && it.channel == row.channel })
+                        TextButton(onClick = { showSourcePicker = true }) { Text("Choose payment source") }
+                    transactionLabels(row)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    row.groupLabel?.let { Text("Group: $it", style = MaterialTheme.typography.bodySmall) }
+                    repaymentSummary(row, snapshot?.reversedOriginalIds.orEmpty())?.let { (label, owed) ->
+                        Text("$label: ${money(owed)}", style = MaterialTheme.typography.bodySmall)
                     }
-                } else Text(friendly(row.reviewState), style = MaterialTheme.typography.bodySmall)
-                Text(transactionTime(row.effectiveTimestamp))
-                row.linkedOriginalId?.let { originalId ->
-                    TextButton(onClick = { selected = null; selectedId = originalId }) { Text("View linked original transaction") }
-                    Text("Linked by matching reference, account, channel and full amount.", style = MaterialTheme.typography.bodySmall)
-                }
-                row.counterpartyLabel?.let { Text(it) }; row.maskedAccountHint?.let { Text(it) }; row.userNotes?.let { Text(it) }
-                `in`.txnsense.app.feature.SmsProvenance(repository, row)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Button(onClick = { form = true }) { Text("Edit / confirm") }
+                    if (row.reviewState == "NeedsReview") Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Check this transaction", style = MaterialTheme.typography.titleMedium)
+                            Text(when {
+                                row.amountMinor == null -> "We couldn't identify a reliable amount. Enter it to finish recording."
+                                row.direction == "Unknown" -> "Choose whether money went out, came in, or moved between accounts."
+                                row.status == "Unknown" -> "Check whether this payment completed before confirming."
+                                else -> "Check the details before including this transaction in your totals."
+                            })
+                        }
+                    } else Text(friendly(row.reviewState), style = MaterialTheme.typography.bodySmall)
+                    Text(transactionTime(row.effectiveTimestamp))
+                    row.linkedOriginalId?.let { originalId ->
+                        TextButton(onClick = { selected = null; selectedId = originalId }) { Text("View linked original transaction") }
+                        Text("Linked by matching reference, account, channel and full amount.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    row.counterpartyLabel?.let { Text(it) }; row.maskedAccountHint?.let { Text(it) }; row.userNotes?.let { Text(it) }
+                    `in`.txnsense.app.feature.SmsProvenance(repository, row)
+                    // Inline edit panel
+                    `in`.txnsense.app.feature.TransactionEditPanel(
+                        repository = repository,
+                        transaction = row,
+                        onSave = { selected = null; selectedId = null; offset = 0; snapshot = null },
+                        onCancel = { /* panel collapses automatically */ },
+                        onDelete = { deleteDialog = true }
+                    )
                     OutlinedButton(onClick = { selected = null; selectedId = null }) { Text("Back") }
-                }
-                TextButton(onClick = { deleteDialog = true }) { Text("Delete transaction") }
+                    TextButton(onClick = { deleteDialog = true }) { Text("Delete transaction") }
                 }
             } else if (settings) {
                 when (settingsSection) {

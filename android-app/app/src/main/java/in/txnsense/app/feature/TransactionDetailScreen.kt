@@ -36,7 +36,6 @@ fun TransactionDetailScreen(
     repository: TransactionRepository,
     transactionId: String,
     onBack: () -> Unit,
-    onEdit: (String) -> Unit,
     onOpenTransaction: (String) -> Unit,
 ) {
     val revision by repository.revision.collectAsState()
@@ -113,11 +112,16 @@ fun TransactionDetailScreen(
 
                     SmsProvenance(repository, r)
 
-                    HorizontalDivider()
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { onEdit(r.id) }) { Text("Edit / confirm") }
-                        OutlinedButton(onClick = { deleteDialog = true }) { Text("Delete") }
-                    }
+                    // Inline edit panel
+                    TransactionEditPanel(
+                        repository = repository,
+                        transaction = r,
+                        onSave = { onBack() },
+                        onCancel = { /* panel collapses automatically */ },
+                        onDelete = { deleteDialog = true }
+                    )
+
+                    OutlinedButton(onClick = { deleteDialog = true }) { Text("Delete") }
                 }
             }
         }
