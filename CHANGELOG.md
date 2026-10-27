@@ -4,6 +4,10 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.2.0-alpha.6
+
+- fix(ui): resolve clickability and touch target disconnect in scrollable transaction lists
+
 ## 0.2.0-alpha.5
 
 - feat(ui): add inline transaction edit panel and quick reclassify

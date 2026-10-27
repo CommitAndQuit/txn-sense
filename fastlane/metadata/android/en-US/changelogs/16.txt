@@ -1,0 +1,1 @@
+fix(ui): resolve clickability and touch target disconnect in scrollable transaction lists
