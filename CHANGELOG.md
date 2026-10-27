@@ -4,6 +4,9 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+- Pulling down on Home now refreshes the SMS inbox immediately instead of showing
+  a one-time confirmation dialog.
+
 ## 0.2.0-alpha.3
 
 - Alpha builds now run automatically for every push to `main`; app behavior is

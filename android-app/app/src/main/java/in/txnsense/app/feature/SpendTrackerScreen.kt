@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,7 +47,6 @@ import androidx.compose.ui.unit.sp
 import `in`.txnsense.app.data.AndroidHistoricalSmsSource
 import `in`.txnsense.app.data.HistoricalSmsSource
 import `in`.txnsense.app.data.MethodSpend
-import `in`.txnsense.app.data.SMS_INBOX_REFRESH_DISCLOSURE_ACCEPTED
 import `in`.txnsense.app.data.SpendOverview
 import `in`.txnsense.app.data.TransactionEntity
 import `in`.txnsense.app.data.TransactionRepository
@@ -130,7 +128,6 @@ fun SpendTrackerScreen(
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var refreshing by remember { mutableStateOf(false) }
-    var showDisclosure by rememberSaveable { mutableStateOf(false) }
 
     fun showMessage(text: String) { scope.launch { snackbar.showSnackbar(text) } }
     fun refresh() {
@@ -159,9 +156,7 @@ fun SpendTrackerScreen(
         else permission.launch(Manifest.permission.READ_SMS)
     }
     fun onRefreshGesture() {
-        if (refreshing || showDisclosure) return
-        if (repository.preferences.getBoolean(SMS_INBOX_REFRESH_DISCLOSURE_ACCEPTED, false)) startRefresh()
-        else showDisclosure = true
+        if (!refreshing) startRefresh()
     }
 
     // Fixed full-screen gradient (light green bottom -> lighter top); the list scrolls over it.
@@ -183,16 +178,6 @@ fun SpendTrackerScreen(
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
     }
-
-    if (showDisclosure) AlertDialog(onDismissRequest = { showDisclosure = false },
-        title = { Text("Read existing SMS?") },
-        text = { Text("The first refresh checks SMS from the last two calendar months; later refreshes check since your last scan. Android grants access to the whole inbox, including personal messages and OTPs. This scan filters on-device and only saves normalized financial fields after it finishes. Raw SMS and senders are not stored. Existing saved records are not changed by a failed or cancelled scan.") },
-        confirmButton = { TextButton(onClick = {
-            showDisclosure = false
-            repository.preferences.edit().putBoolean(SMS_INBOX_REFRESH_DISCLOSURE_ACCEPTED, true).commit()
-            startRefresh()
-        }) { Text("I understand — refresh") } },
-        dismissButton = { TextButton(onClick = { showDisclosure = false }) { Text("Not now") } })
 }
 
 @Composable

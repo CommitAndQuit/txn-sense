@@ -8,7 +8,6 @@ import java.time.Instant
 import java.time.ZoneId
 
 const val SMS_INBOX_LAST_SCAN_AT = "sms_inbox_last_scan_at"
-const val SMS_INBOX_REFRESH_DISCLOSURE_ACCEPTED = "sms_inbox_refresh_disclosure"
 
 data class ImportWindow(val start: Long, val end: Long) {
     fun contains(timestamp: Long) = timestamp in start..end

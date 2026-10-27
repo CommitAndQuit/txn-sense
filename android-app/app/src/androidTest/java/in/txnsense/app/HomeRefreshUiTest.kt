@@ -8,7 +8,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import `in`.txnsense.app.data.HistoricalSms
 import `in`.txnsense.app.data.HistoricalSmsSource
 import `in`.txnsense.app.data.ImportWindow
-import `in`.txnsense.app.data.SMS_INBOX_REFRESH_DISCLOSURE_ACCEPTED
 import `in`.txnsense.app.data.TransactionRepository
 import `in`.txnsense.app.feature.SpendTrackerScreen
 import `in`.txnsense.app.ui.TxnSenseTheme
@@ -23,7 +22,7 @@ import java.util.UUID
 class HomeRefreshUiTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
 
-    @Test fun pull_to_refresh_discloses_once_then_reports_the_summary() {
+    @Test fun pull_to_refresh_imports_and_reports_the_summary() {
         val context = rule.activity
         InstrumentationRegistry.getInstrumentation().uiAutomation
             .grantRuntimePermission(context.packageName, Manifest.permission.READ_SMS)
@@ -51,12 +50,10 @@ class HomeRefreshUiTest {
                 }
             }
             rule.onNodeWithTag("home_refresh").performTouchInput { swipeDown() }
-            rule.waitUntil(15000) { rule.onAllNodesWithText("Read existing SMS?").fetchSemanticsNodes().isNotEmpty() }
-            rule.onNodeWithText("I understand — refresh").performClick()
             rule.waitUntil(15000) { rule.onAllNodesWithText("Added 2 transactions").fetchSemanticsNodes().isNotEmpty() }
             assertNotNull(window)
             assertEquals(ImportWindow.lastTwoMonths(window!!.end), window)
-            assertEquals(true, repository.preferences.getBoolean(SMS_INBOX_REFRESH_DISCLOSURE_ACCEPTED, false))
+            rule.onNodeWithText("Read existing SMS?").assertDoesNotExist()
 
             rule.onNodeWithTag("home_refresh").performTouchInput { swipeDown() }
             rule.waitUntil(15000) { rule.onAllNodesWithText("Up to date").fetchSemanticsNodes().isNotEmpty() }
