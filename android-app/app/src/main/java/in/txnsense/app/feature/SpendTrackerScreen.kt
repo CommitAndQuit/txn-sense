@@ -165,7 +165,7 @@ fun SpendTrackerScreen(
             LazyColumn(
                 Modifier.fillMaxSize().statusBarsPadding().testTag("home_refresh")
                     .semantics { contentDescription = "Refresh from SMS" },
-                contentPadding = PaddingValues(top = 16.dp),
+                contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 item { Header(onOpenSettings) }
@@ -355,7 +355,8 @@ private fun TransactionSheet(
     var menu by remember { mutableStateOf(false) }
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .background(scheme.surface).padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 24.dp)
+            .background(scheme.surface).padding(horizontal = 20.dp).padding(top = 20.dp)
+            .navigationBarsPadding().padding(bottom = 32.dp)
     ) {
         Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically) {
@@ -386,7 +387,7 @@ internal fun TransactionRow(row: TransactionEntity, onClick: () -> Unit) {
     val v = visualFor(row.channel, brand)
     val time = DateTimeFormatter.ofPattern("d MMM, HH:mm").withZone(ZoneId.systemDefault())
     Row(
-        Modifier.fillMaxWidth().expandFromRow("txn-${row.id}").clickableMenu(onClick).padding(vertical = 12.dp),
+        Modifier.fillMaxWidth().clickableMenu(onClick).padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(v.color), contentAlignment = Alignment.Center) {

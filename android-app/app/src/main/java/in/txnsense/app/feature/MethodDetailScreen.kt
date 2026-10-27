@@ -94,13 +94,18 @@ fun MethodDetailScreen(
             ) {
                 if (list.isEmpty()) {
                     Text("No spends for this payment method this month.", color = brand.textSecondary,
-                        modifier = Modifier.padding(24.dp))
+                        modifier = Modifier.padding(24.dp).navigationBarsPadding())
                 } else {
                     LazyColumn(
                         Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
+                        contentPadding = PaddingValues(
+                            start = 20.dp,
+                            end = 20.dp,
+                            top = 12.dp,
+                            bottom = 32.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                        )
                     ) {
-                        itemsIndexed(list) { i, row ->
+                        itemsIndexed(list, key = { _, row -> row.id }) { i, row ->
                             TransactionRow(row) { onOpenTransaction(row.id) }
                             if (i < list.lastIndex) HorizontalDivider(color = brand.hairline)
                         }

@@ -53,7 +53,7 @@ fun TransactionDetailScreen(
     var deleteDialog by remember { mutableStateOf(false) }
 
     Box(
-        Modifier.fillMaxSize().expandFromRow("txn-$transactionId")
+        Modifier.fillMaxSize()
             .background(Brush.verticalGradient(listOf(brand.bgTop, brand.bgBottom)))
     ) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -83,7 +83,8 @@ fun TransactionDetailScreen(
                 Column(
                     Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp)
                         .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)).background(scheme.surface)
-                        .verticalScroll(rememberScrollState()).padding(20.dp),
+                        .verticalScroll(rememberScrollState()).padding(20.dp)
+                        .navigationBarsPadding(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (r.reviewState == "NeedsReview") Card(Modifier.fillMaxWidth()) {
@@ -122,6 +123,7 @@ fun TransactionDetailScreen(
                     )
 
                     OutlinedButton(onClick = { deleteDialog = true }) { Text("Delete") }
+                    Spacer(Modifier.height(16.dp))
                 }
             }
         }

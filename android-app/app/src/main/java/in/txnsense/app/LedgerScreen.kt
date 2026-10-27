@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.dp
 import `in`.txnsense.app.data.*
 import `in`.txnsense.app.feature.TransactionForm
 import `in`.txnsense.app.feature.friendly
-import `in`.txnsense.app.feature.expandFromRow
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -177,7 +176,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 TransactionForm(repository, selected, onDone = { dirtyForm = false; quickForm = false; form = false; selected = null; selectedId = null; offset = 0; error = null }, onDirtyChange = { dirtyForm = it }, quickOnly = quickForm)
             } else if (selected != null) {
                 val row = selected!!
-                Column(Modifier.fillMaxWidth().expandFromRow("txn-${row.id}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(money(row.amountMinor), style = MaterialTheme.typography.headlineSmall)
                     Text("${friendly(row.direction)} · ${friendly(row.status)}")
                     Text("${friendly(row.transactionType)} · ${friendly(row.channel)} · ${friendly(row.sourceType)}")
