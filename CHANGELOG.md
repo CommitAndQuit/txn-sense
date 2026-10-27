@@ -4,6 +4,13 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+- Add pull-to-refresh SMS catch-up on Home. The first refresh offers a one-time
+  inbox disclosure and checks the last two calendar months; later refreshes check
+  only since the previous successful scan. Imported rows are committed as an
+  undoable batch, uncertain records go to Review, and a snackbar summarizes the
+  result. Failed, cancelled or denied scans leave the ledger and scan timestamp
+  unchanged.
+
 ## 0.2.0-alpha.1
 
 - Publish TxnSense under the `in.txnsense.app` package with a new persistent

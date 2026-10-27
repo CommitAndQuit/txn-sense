@@ -19,6 +19,13 @@ class HistoricalImportTest {
     private fun repository() = TransactionRepository(context, "import_test_${UUID.randomUUID()}")
     private fun grant() = InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.READ_SMS)
     private fun source(vararg rows: HistoricalSms) = HistoricalSmsSource { _, emit -> rows.forEach { emit(it) } }
+    private class RecordingSource(private val rows: List<HistoricalSms>) : HistoricalSmsSource {
+        var window: ImportWindow? = null
+        override suspend fun read(window: ImportWindow, emit: suspend (HistoricalSms) -> Unit) {
+            this.window = window
+            rows.forEach { emit(it) }
+        }
+    }
 
     @Test fun permission_denial_never_reads_source() = runBlocking {
         val denied = object : android.content.ContextWrapper(context) {
@@ -30,7 +37,116 @@ class HistoricalImportTest {
                 repository.previewImport(HistoricalSmsSource { _, _ -> fail("Read without permission") })
                 fail("Permission denial accepted")
             } catch (_: IllegalStateException) { }
+            try {
+                repository.refreshFromInbox(HistoricalSmsSource { _, _ -> fail("Refresh read without permission") })
+                fail("Refresh permission denial accepted")
+            } catch (_: IllegalStateException) { }
+            assertEquals(0L, repository.preferences.getLong(SMS_INBOX_LAST_SCAN_AT, 0L))
             assertTrue(repository.snapshot().rows.isEmpty())
+        } finally { repository.eraseAll(); repository.close() }
+    }
+
+    @Test fun first_refresh_scans_two_months_auto_commits_and_stays_undoable() = runBlocking {
+        grant()
+        val repository = repository()
+        val now = System.currentTimeMillis()
+        val window = ImportWindow.lastTwoMonths(now)
+        try {
+            val source = RecordingSource(listOf(
+                HistoricalSms("TEST", now - 1000, 0, "INR 42 debited via UPI"),
+                HistoricalSms("TEST", now - 2000, 0, "INR 43 refund credited via UPI account XX0000"),
+                HistoricalSms("TEST", window.start - 1, 0, "INR 44 debited via UPI"),
+                HistoricalSms("TEST", now - 3000, 0, "OTP 000000")
+            ))
+            val result = repository.refreshFromInbox(source, now)
+            assertEquals(window, source.window)
+            assertEquals(4, result.scanned)
+            assertEquals(2, result.ignored)
+            assertEquals(2, result.inserted)
+            assertEquals(0, result.duplicates)
+            assertEquals(1, result.needsReview)
+            assertEquals(now, repository.preferences.getLong(SMS_INBOX_LAST_SCAN_AT, 0L))
+            val batch = repository.latestImport()!!
+            assertEquals(2, batch.inserted)
+            assertEquals(2, repository.undoImport(batch.id))
+        } finally { repository.eraseAll(); repository.close() }
+    }
+
+    @Test fun later_refresh_scans_only_since_the_previous_successful_scan() = runBlocking {
+        grant()
+        val repository = repository()
+        val now = System.currentTimeMillis()
+        try {
+            val first = RecordingSource(listOf(HistoricalSms("TEST", now - 1000, 0, "INR 42 debited via UPI")))
+            repository.refreshFromInbox(first, now)
+            assertEquals(ImportWindow.lastTwoMonths(now), first.window)
+
+            val later = now + 60_000
+            val second = RecordingSource(listOf(HistoricalSms("TEST", later - 10_000, 0, "INR 43 debited via UPI")))
+            val result = repository.refreshFromInbox(second, later)
+            assertEquals(ImportWindow(now - 300_000, later), second.window)
+            assertEquals(1, result.inserted)
+            assertEquals(0, result.duplicates)
+            assertEquals(later, repository.preferences.getLong(SMS_INBOX_LAST_SCAN_AT, 0L))
+        } finally { repository.eraseAll(); repository.close() }
+    }
+
+    @Test fun refresh_skips_a_message_already_recorded_by_live_capture() = runBlocking {
+        grant()
+        InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.RECEIVE_SMS)
+        val repository = repository()
+        val now = System.currentTimeMillis()
+        val received = now - 10_000
+        val body = "INR 42 debited via UPI"
+        try {
+            repository.preferences.edit().putBoolean("sms_disclosure", true).commit()
+            assertTrue(repository.ingest(IncomingSms("TEST", received, body)))
+            val result = repository.refreshFromInbox(
+                RecordingSource(listOf(HistoricalSms("TEST", received, 0, body))), now)
+            assertEquals(0, result.inserted)
+            assertEquals(1, result.duplicates)
+            assertEquals(1, repository.snapshot().rows.size)
+        } finally { repository.eraseAll(); repository.close() }
+    }
+
+    @Test fun failed_or_cancelled_refresh_keeps_the_previous_scan_timestamp() = runBlocking {
+        grant()
+        val repository = repository()
+        val now = System.currentTimeMillis()
+        val previous = now - 10_000
+        try {
+            repository.preferences.edit().putLong(SMS_INBOX_LAST_SCAN_AT, previous).commit()
+            try {
+                repository.refreshFromInbox(HistoricalSmsSource { _, _ -> error("Synthetic scan failure") }, now)
+                fail("Failed refresh was accepted")
+            } catch (_: IllegalStateException) { }
+            assertEquals(previous, repository.preferences.getLong(SMS_INBOX_LAST_SCAN_AT, 0L))
+
+            val ready = CompletableDeferred<Unit>()
+            val scan = launch {
+                repository.refreshFromInbox(HistoricalSmsSource { _, emit ->
+                    emit(HistoricalSms("TEST", now - 1000, 0, "INR 42 debited via UPI"))
+                    ready.complete(Unit)
+                    awaitCancellation()
+                }, now)
+            }
+            ready.await(); scan.cancel(); scan.join()
+            assertEquals(previous, repository.preferences.getLong(SMS_INBOX_LAST_SCAN_AT, 0L))
+            assertTrue(repository.snapshot().rows.isEmpty())
+        } finally { repository.eraseAll(); repository.close() }
+    }
+
+    @Test fun settings_import_advances_timestamp_only_after_commit() = runBlocking {
+        grant()
+        val repository = repository()
+        val now = System.currentTimeMillis()
+        try {
+            val preview = repository.previewImport(source(
+                HistoricalSms("TEST", now - 1000, 0, "INR 42 debited via UPI")), now)
+            assertEquals(0L, repository.preferences.getLong(SMS_INBOX_LAST_SCAN_AT, 0L))
+            repository.commitImport(preview)
+            assertEquals(preview.window.end, repository.preferences.getLong(SMS_INBOX_LAST_SCAN_AT, 0L))
+            assertEquals(ImportWindow.lastThreeMonths(now).start, preview.window.start)
         } finally { repository.eraseAll(); repository.close() }
     }
 

@@ -46,6 +46,7 @@ The official `f-droid.org` catalog submission is deferred while the self-hosted 
 - [x] **Spend & Income Tracking**: Daily, monthly, and per-payment-method spend analytics with refund netting.
 - [x] **Transaction Review Queue**: Safeguards uncertain amounts or unrecognized formats for manual verification before booking.
 - [x] **Past SMS Import**: Optional on-device scan of the last 3 months of inbox messages with safety previews and undo support.
+- [x] **Pull-to-Refresh SMS Catch-Up**: Refresh Home to import new SMS since the last successful scan; uncertain records still go to Review.
 - [x] **Encrypted Local Storage**: Hardware-backed key protection using SQLCipher and Room database migrations.
 - [x] **Modern Compose UI**: Material 3 UI featuring light/dark themes, responsive layouts, and unsaved-changes warnings.
 - [x] **Automated CI/CD**: GitHub Actions workflow for automated APK building, tagging, and releases.

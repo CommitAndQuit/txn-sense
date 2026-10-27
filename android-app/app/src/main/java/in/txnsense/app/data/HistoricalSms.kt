@@ -7,12 +7,25 @@ import kotlinx.coroutines.ensureActive
 import java.time.Instant
 import java.time.ZoneId
 
+const val SMS_INBOX_LAST_SCAN_AT = "sms_inbox_last_scan_at"
+const val SMS_INBOX_REFRESH_DISCLOSURE_ACCEPTED = "sms_inbox_refresh_disclosure"
+
 data class ImportWindow(val start: Long, val end: Long) {
     fun contains(timestamp: Long) = timestamp in start..end
     companion object {
+        /** Overlap keeps an SMS delivered while the previous scan was finishing from being skipped. */
+        private const val CATCH_UP_OVERLAP_MS = 5L * 60 * 1000
+        fun lastTwoMonths(now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): ImportWindow =
+            ImportWindow(Instant.ofEpochMilli(now).atZone(zone).toLocalDate().minusMonths(2)
+                .atStartOfDay(zone).toInstant().toEpochMilli(), now)
         fun lastThreeMonths(now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): ImportWindow =
             ImportWindow(Instant.ofEpochMilli(now).atZone(zone).toLocalDate().minusMonths(3)
                 .atStartOfDay(zone).toInstant().toEpochMilli(), now)
+        /** Refreshes only the time since the previous successful scan, with a small overlap. */
+        fun catchUp(lastScanAt: Long?, now: Long = System.currentTimeMillis(),
+            zone: ZoneId = ZoneId.systemDefault()): ImportWindow =
+            if (lastScanAt == null || lastScanAt > now) lastTwoMonths(now, zone)
+            else ImportWindow((lastScanAt - CATCH_UP_OVERLAP_MS).coerceAtLeast(0), now)
     }
 }
 
@@ -57,3 +70,12 @@ class ImportPreview internal constructor(
 }
 
 data class ImportResult(val batchId: String, val inserted: Int, val duplicates: Int)
+
+/** Counts from a Home refresh. The commit creates the same undoable batch as a Settings import. */
+data class InboxRefreshResult(
+    val scanned: Int,
+    val ignored: Int,
+    val inserted: Int,
+    val duplicates: Int,
+    val needsReview: Int,
+)

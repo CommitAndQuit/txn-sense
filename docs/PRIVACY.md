@@ -19,6 +19,15 @@ It does not change your phone's SMS or send individual import notifications. Und
 untouched records in a batch and preserves user edits. Erase all clears import previews
 and invalidates scans. Alpha.4 and earlier do not include this permission or feature.
 
+Pulling down on Home can also catch up from the inbox. The first pull shows a separate
+one-time disclosure and accepts `READ_SMS`; the first scan covers the last two calendar
+months. Later pulls scan only since the previous successful scan, with a five-minute
+overlap, and commit automatically as the same kind of undoable batch as a Settings import.
+Uncertain records go to Review. The app stores the time of the last successful commit in
+private preferences so it can narrow the next scan; failed, cancelled, discarded or
+permission-denied scans do not advance it. Raw SMS bodies and senders remain transient
+and are never saved.
+
 `POST_NOTIFICATIONS` is separate. Disabling notifications does not disable otherwise
 authorized capture. Manual entry works without either permission. The in-app capture
 toggle can pause new recording without revoking Android's permission.
@@ -28,8 +37,9 @@ toggle can pause new recording without revoking Android's permission.
 The encrypted local database stores normalized amounts, currency, direction, status,
 channel/category, timestamps, source type, parser version/confidence, review state,
 masked account hints, user corrections and correction history. A keyed HMAC fingerprint
-detects repeat delivery without retaining its source inputs. Labels and notes you
-enter yourself are also stored locally. From alpha.2, the app additionally stores supported
+detects repeat delivery without retaining its source inputs. The time of the last
+successful inbox refresh is stored in private preferences, not in the encrypted database.
+Labels and notes you enter yourself are also stored locally. From alpha.2, the app additionally stores supported
 parsed recipient labels, device-keyed hashes of explicit transaction references, and
 local record IDs linking high-confidence refunds/reversals. Raw reference numbers are
 not stored. Editing or deleting a record removes affected automatic links.

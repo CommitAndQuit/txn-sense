@@ -342,7 +342,7 @@ class TransactionRepository(private val context: Context, private val namespace:
     fun historyPermissionGranted(): Boolean = context.checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
 
     suspend fun previewImport(source: HistoricalSmsSource = AndroidHistoricalSmsSource(context), now: Long = System.currentTimeMillis(),
-        progress: (Int) -> Unit = {}): ImportPreview = withContext(Dispatchers.IO) {
+        progress: (Int) -> Unit = {}, window: ImportWindow = ImportWindow.lastThreeMonths(now)): ImportPreview = withContext(Dispatchers.IO) {
         check(historyPermissionGranted()) { "Reading existing SMS is not permitted." }
         val epoch = locked { importEpoch }
         val engine = locked { parser() }
@@ -352,7 +352,6 @@ class TransactionRepository(private val context: Context, private val namespace:
         // nothing about live traffic. Nor is the contradiction audit, which would mean running every
         // learned pattern over thousands of messages inside what is meant to be a responsive preview.
         val learnFromHistory = locked { learningEnabled() }
-        val window = ImportWindow.lastThreeMonths(now)
         val candidates = mutableListOf<ImportCandidate>()
         val seen = mutableSetOf<String>()
         var scanned = 0; var ignored = 0; var duplicates = 0
@@ -417,9 +416,24 @@ class TransactionRepository(private val context: Context, private val namespace:
                 operation.ensureActive()
                 if (inserted > 0) dao.insertBatch(ImportBatchEntity(batchId, System.currentTimeMillis(), preview.window.start, preview.window.end, inserted))
             }
+            if (preview.window.end > preferences.getLong(SMS_INBOX_LAST_SCAN_AT, 0L)) {
+                preferences.edit().putLong(SMS_INBOX_LAST_SCAN_AT, preview.window.end).commit()
+            }
             revision.value++
             ImportResult(batchId, inserted, duplicates)
         }
+    }
+
+    /** Home pull-to-refresh: scans only since the last successful import, commits automatically,
+     *  and keeps uncertain records in Review. The resulting batch remains undoable in Settings. */
+    suspend fun refreshFromInbox(source: HistoricalSmsSource = AndroidHistoricalSmsSource(context),
+        now: Long = System.currentTimeMillis(), progress: (Int) -> Unit = {}): InboxRefreshResult {
+        check(historyPermissionGranted()) { "Reading existing SMS is not permitted." }
+        val previous = preferences.getLong(SMS_INBOX_LAST_SCAN_AT, 0L).takeIf { it > 0 }
+        val preview = previewImport(source, now, progress, ImportWindow.catchUp(previous, now))
+        val result = commitImport(preview)
+        return InboxRefreshResult(preview.scanned, preview.ignored, result.inserted,
+            result.duplicates, preview.needsReview)
     }
 
     suspend fun latestImport(): ImportBatchEntity? = locked {

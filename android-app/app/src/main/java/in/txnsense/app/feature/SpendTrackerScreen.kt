@@ -2,6 +2,9 @@
 
 package `in`.txnsense.app.feature
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.Canvas
@@ -20,6 +23,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -32,12 +36,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import `in`.txnsense.app.data.AndroidHistoricalSmsSource
+import `in`.txnsense.app.data.HistoricalSmsSource
 import `in`.txnsense.app.data.MethodSpend
+import `in`.txnsense.app.data.SMS_INBOX_REFRESH_DISCLOSURE_ACCEPTED
 import `in`.txnsense.app.data.SpendOverview
 import `in`.txnsense.app.data.TransactionEntity
 import `in`.txnsense.app.data.TransactionRepository
@@ -52,6 +63,8 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 /** Shared-element key so a tapped method card morphs into the detail screen's background.
  *  Keyed per instrument (channel + bank + masked last-4) so each card has its own morph. */
@@ -94,6 +107,7 @@ internal fun methodLetter(channel: String): String = when (channel) {
     else -> "•"
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SpendTrackerScreen(
     repository: TransactionRepository,
@@ -108,23 +122,77 @@ fun SpendTrackerScreen(
     sharedScope: SharedTransitionScope? = null,
     animatedScope: AnimatedVisibilityScope? = null,
     carouselState: androidx.compose.foundation.lazy.LazyListState? = null,
+    historicalSmsSource: HistoricalSmsSource? = null,
 ) {
     val brand = LocalBrand.current
-    // Fixed full-screen gradient (light green bottom -> lighter top); the list scrolls over it.
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(brand.bgTop, brand.bgBottom)))) {
-        LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding(),
-            contentPadding = PaddingValues(top = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            item { Header(onOpenSettings) }
-            item { MethodCarousel(overview?.methods.orEmpty(), onOpenSettings, sharedScope, animatedScope, carouselState ?: rememberLazyListState()) { m -> onOpenMethod(m.channel, m.bankName, m.maskedAccountHint, month) } }
-            item { MonthSpendPager(repository, month, onMonthChange) }
-            // White sheet sized to its content (min one screen tall) so the whole list scrolls with
-            // the page instead of being clipped to a single fixed-height, non-scrolling panel.
-            item { TransactionSheet(Modifier.heightIn(min = LocalConfiguration.current.screenHeightDp.dp), overview, timeFilter, onTimeFilter, onOpenTransaction) }
+    val context = LocalContext.current
+    val source = historicalSmsSource ?: remember(context) { AndroidHistoricalSmsSource(context) }
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    var refreshing by remember { mutableStateOf(false) }
+    var showDisclosure by rememberSaveable { mutableStateOf(false) }
+
+    fun showMessage(text: String) { scope.launch { snackbar.showSnackbar(text) } }
+    fun refresh() {
+        if (refreshing) return
+        refreshing = true
+        scope.launch {
+            try {
+                val result = repository.refreshFromInbox(source)
+                val noun = if (result.inserted == 1) "transaction" else "transactions"
+                showMessage(when {
+                    result.inserted == 0 -> "Up to date"
+                    result.needsReview > 0 -> "Added ${result.inserted} $noun · ${result.needsReview} ${if (result.needsReview == 1) "needs" else "need"} review"
+                    else -> "Added ${result.inserted} $noun"
+                })
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SecurityException) { showMessage("Inbox permission was not granted. Nothing was changed.") }
+            catch (_: Exception) { showMessage("Could not refresh from SMS. Nothing was changed.") }
+            finally { refreshing = false }
         }
     }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) refresh() else showMessage("Inbox permission was not granted. You can still add transactions manually.")
+    }
+    fun startRefresh() {
+        if (repository.historyPermissionGranted()) refresh()
+        else permission.launch(Manifest.permission.READ_SMS)
+    }
+    fun onRefreshGesture() {
+        if (refreshing || showDisclosure) return
+        if (repository.preferences.getBoolean(SMS_INBOX_REFRESH_DISCLOSURE_ACCEPTED, false)) startRefresh()
+        else showDisclosure = true
+    }
+
+    // Fixed full-screen gradient (light green bottom -> lighter top); the list scrolls over it.
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(brand.bgTop, brand.bgBottom)))) {
+        PullToRefreshBox(isRefreshing = refreshing, onRefresh = { onRefreshGesture() }, modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                Modifier.fillMaxSize().statusBarsPadding().testTag("home_refresh")
+                    .semantics { contentDescription = "Refresh from SMS" },
+                contentPadding = PaddingValues(top = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                item { Header(onOpenSettings) }
+                item { MethodCarousel(overview?.methods.orEmpty(), onOpenSettings, sharedScope, animatedScope, carouselState ?: rememberLazyListState()) { m -> onOpenMethod(m.channel, m.bankName, m.maskedAccountHint, month) } }
+                item { MonthSpendPager(repository, month, onMonthChange) }
+                // White sheet sized to its content (min one screen tall) so the whole list scrolls with
+                // the page instead of being clipped to a single fixed-height, non-scrolling panel.
+                item { TransactionSheet(Modifier.heightIn(min = LocalConfiguration.current.screenHeightDp.dp), overview, timeFilter, onTimeFilter, onOpenTransaction) }
+            }
+        }
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
+    }
+
+    if (showDisclosure) AlertDialog(onDismissRequest = { showDisclosure = false },
+        title = { Text("Read existing SMS?") },
+        text = { Text("The first refresh checks SMS from the last two calendar months; later refreshes check since your last scan. Android grants access to the whole inbox, including personal messages and OTPs. This scan filters on-device and only saves normalized financial fields after it finishes. Raw SMS and senders are not stored. Existing saved records are not changed by a failed or cancelled scan.") },
+        confirmButton = { TextButton(onClick = {
+            showDisclosure = false
+            repository.preferences.edit().putBoolean(SMS_INBOX_REFRESH_DISCLOSURE_ACCEPTED, true).commit()
+            startRefresh()
+        }) { Text("I understand — refresh") } },
+        dismissButton = { TextButton(onClick = { showDisclosure = false }) { Text("Not now") } })
 }
 
 @Composable
@@ -263,7 +331,8 @@ private fun MonthTotalCard(repository: TransactionRepository, ym: YearMonth) {
     val scheme = MaterialTheme.colorScheme
     val brand = LocalBrand.current
     var total by remember(ym) { mutableStateOf<Long?>(null) }
-    LaunchedEffect(ym) { total = runCatching { repository.monthSpendTotal(ym.atDay(1)) }.getOrNull() }
+    val revision by repository.revision.collectAsState()
+    LaunchedEffect(ym, revision) { total = runCatching { repository.monthSpendTotal(ym.atDay(1)) }.getOrNull() }
     // Read the locale from the configuration so the label recomposes on a locale change.
     val label = "${ym.month.getDisplayName(TextStyle.FULL, LocalConfiguration.current.locales[0])} ${ym.year}"
     val glassShape = RoundedCornerShape(24.dp)
