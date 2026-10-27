@@ -26,8 +26,9 @@ toggle can pause new recording without revoking Android's permission.
 ## What is stored
 
 The encrypted local database stores normalized amounts, currency, direction, status,
-channel/category, timestamps, source type, parser version/confidence, review state,
-masked account hints, user corrections and correction history. A keyed HMAC fingerprint
+channel/category, spending classification (spending, investment, transfer to self or
+family), timestamps, source type, parser version/confidence, review state, masked
+account hints, user corrections and correction history. A keyed HMAC fingerprint
 detects repeat delivery without retaining its source inputs. Labels and notes you
 enter yourself are also stored locally. From alpha.2, the app additionally stores supported
 parsed recipient labels, device-keyed hashes of explicit transaction references, and

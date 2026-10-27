@@ -4,6 +4,12 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+- Classify transactions as spending, investment, transfer to self, or transfer to
+  family from both the quick Categorize panel and full edit form. Non-expense
+  entries stay in ledger history with a badge but are excluded from spend totals,
+  method analytics, and repayment summaries. Existing self-transfers migrate to
+  the transfer-to-self classification.
+
 ## 0.2.0-alpha.1
 
 - Publish TxnSense under the `in.txnsense.app` package with a new persistent

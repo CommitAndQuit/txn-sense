@@ -39,6 +39,8 @@ data class TransactionEntity(
     val paymentSourceId: String? = null,
     /** Issuing bank inferred from the SMS at capture time; null when unrecognized or manual. */
     val bankName: String? = null,
+    /** Expense by default; investments and transfers are retained but excluded from spending. */
+    val spendType: String = "Expense",
 )
 
 /** A local nickname used to map a payment channel to one of the user's sources. */
@@ -104,7 +106,7 @@ interface TransactionDao {
     @Query("SELECT COUNT(*) FROM transactions WHERE reviewState = 'NeedsReview'") suspend fun reviewCount(): Int
     @Query("SELECT * FROM transactions WHERE reviewState = 'NeedsReview' ORDER BY effectiveTimestamp DESC, id DESC LIMIT :limit OFFSET :offset")
     fun reviewPage(limit: Int, offset: Int): List<TransactionEntity>
-    @Query("SELECT * FROM transactions WHERE effectiveTimestamp >= :start AND effectiveTimestamp < :end AND (:reviewOnly = 0 OR reviewState = 'NeedsReview') AND (:direction = 'All' OR direction = :direction) AND (:purpose = 'All' OR (:purpose = 'Personal' AND ownership = 'Personal') OR (:purpose = 'ForOthers' AND ownership = 'ForOther') OR (:purpose = 'Group' AND ownership = 'Group') OR (:purpose = 'SelfTransfer' AND (ownership = 'SelfTransfer' OR transactionType = 'SelfTransfer'))) AND (:origin = 'All' OR (:origin = 'Manual' AND sourceType = 'Manual') OR (:origin = 'Edited' AND isUserCorrected = 1)) AND (:sourceKind = 'All' OR paymentSourceId IN (SELECT id FROM payment_sources WHERE kind = :sourceKind)) ORDER BY effectiveTimestamp DESC, id DESC LIMIT :limit OFFSET :offset")
+    @Query("SELECT * FROM transactions WHERE effectiveTimestamp >= :start AND effectiveTimestamp < :end AND (:reviewOnly = 0 OR reviewState = 'NeedsReview') AND (:direction = 'All' OR direction = :direction) AND (:purpose = 'All' OR (:purpose = 'Personal' AND ownership = 'Personal' AND spendType = 'Expense') OR (:purpose = 'ForOthers' AND ownership = 'ForOther' AND spendType = 'Expense') OR (:purpose = 'Group' AND ownership = 'Group' AND spendType = 'Expense') OR (:purpose = 'SelfTransfer' AND (spendType = 'TransferToSelf' OR ownership = 'SelfTransfer' OR transactionType = 'SelfTransfer'))) AND (:origin = 'All' OR (:origin = 'Manual' AND sourceType = 'Manual') OR (:origin = 'Edited' AND isUserCorrected = 1)) AND (:sourceKind = 'All' OR paymentSourceId IN (SELECT id FROM payment_sources WHERE kind = :sourceKind)) ORDER BY effectiveTimestamp DESC, id DESC LIMIT :limit OFFSET :offset")
     fun page(purpose: String, origin: String, direction: String, reviewOnly: Boolean, sourceKind: String, start: Long, end: Long, limit: Int, offset: Int): List<TransactionEntity>
     @Query("SELECT * FROM transactions WHERE id = :id") fun get(id: String): TransactionEntity?
     @Query("SELECT EXISTS(SELECT 1 FROM transactions WHERE sourceFingerprint = :fingerprint)") fun hasFingerprint(fingerprint: ByteArray): Boolean
@@ -145,9 +147,10 @@ interface TransactionDao {
         "COALESCE(SUM(CASE WHEN direction = 'Debit' THEN amountMinor ELSE -amountMinor END), 0) AS netSpendMinor, " +
         "SUM(CASE WHEN direction = 'Debit' THEN 1 ELSE 0 END) AS spendCount " +
         "FROM transactions WHERE status = 'Successful' AND reviewState != 'NeedsReview' " +
-        "AND transactionType NOT IN ('SelfTransfer', 'CardRepayment') AND ownership != 'SelfTransfer' " +
+        "AND transactionType NOT IN ('SelfTransfer', 'CardRepayment') AND ownership != 'SelfTransfer' AND spendType = 'Expense' " +
         "AND channel != 'Unknown' AND effectiveTimestamp >= :start AND effectiveTimestamp < :end " +
         "AND id NOT IN (SELECT linkedOriginalId FROM transactions WHERE linkedOriginalId IS NOT NULL AND status = 'Reversed' AND reviewState != 'NeedsReview') " +
+        "AND (transactionType != 'Refund' OR linkedOriginalId IS NULL OR linkedOriginalId IN (SELECT id FROM transactions WHERE spendType = 'Expense')) " +
         "AND (direction = 'Debit' OR (direction = 'Credit' AND transactionType IN ('Refund', 'Reversal'))) " +
         "GROUP BY channel, bankName, maskedAccountHint ORDER BY netSpendMinor DESC")
     fun spendByMethod(start: Long, end: Long): List<MethodSpend>
@@ -156,7 +159,7 @@ interface TransactionDao {
     // net against spend, not income), self-transfers, and card repayments.
     @Query("SELECT channel AS channel, COALESCE(SUM(amountMinor), 0) AS incomeMinor, COUNT(*) AS incomeCount " +
         "FROM transactions WHERE direction = 'Credit' AND status = 'Successful' AND reviewState != 'NeedsReview' " +
-        "AND transactionType NOT IN ('Refund', 'Reversal', 'SelfTransfer', 'CardRepayment') AND ownership != 'SelfTransfer' " +
+        "AND transactionType NOT IN ('Refund', 'Reversal', 'SelfTransfer', 'CardRepayment') AND ownership != 'SelfTransfer' AND spendType = 'Expense' " +
         "AND effectiveTimestamp >= :start AND effectiveTimestamp < :end " +
         "AND id NOT IN (SELECT linkedOriginalId FROM transactions WHERE linkedOriginalId IS NOT NULL AND status = 'Reversed' AND reviewState != 'NeedsReview') " +
         "GROUP BY channel ORDER BY incomeMinor DESC")
@@ -164,7 +167,7 @@ interface TransactionDao {
 }
 
 @Database(entities = [TransactionEntity::class, CorrectionEntity::class, ImportBatchEntity::class,
-    PaymentSourceEntity::class, SkeletonSightingEntity::class, LearnedTemplateEntity::class], version = 6, exportSchema = true)
+    PaymentSourceEntity::class, SkeletonSightingEntity::class, LearnedTemplateEntity::class], version = 7, exportSchema = true)
 abstract class FinanceDatabase : RoomDatabase() {
     abstract fun transactions(): TransactionDao
     abstract fun learning(): LearningDao
@@ -176,6 +179,13 @@ abstract class FinanceDatabase : RoomDatabase() {
     }
 
     companion object {
+        /** Retains non-expense entries without changing their stored financial fields. */
+        val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE transactions ADD COLUMN spendType TEXT NOT NULL DEFAULT 'Expense'")
+                db.execSQL("UPDATE transactions SET spendType = 'TransferToSelf' WHERE transactionType = 'SelfTransfer' OR ownership = 'SelfTransfer'")
+            }
+        }
         /** Adds the two tables template learning needs. Neither holds a message, only layouts. */
         val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
@@ -231,7 +241,7 @@ abstract class FinanceDatabase : RoomDatabase() {
                 System.loadLibrary("sqlcipher")
                 Logger.setTarget(NoopTarget())
                 db = Room.databaseBuilder(context, FinanceDatabase::class.java, name)
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .openHelperFactory(SupportOpenHelperFactory(connectionPassword)).build()
                 db.connectionPassword = connectionPassword
                 db.openHelper.writableDatabase

@@ -157,7 +157,8 @@ class TransactionRepository(private val context: Context, private val namespace:
         val dayEnd = currentDay.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val reversedOriginals = db().transactions().reversedOriginals().toSet()
         fun eligible(row: TransactionEntity, daily: Boolean = false) = row.id !in reversedOriginals && (!daily || row.effectiveTimestamp in dayStart until dayEnd) && row.status == TransactionStatus.Successful.name &&
-            row.reviewState != ReviewState.NeedsReview.name && row.transactionType !in listOf(TransactionType.SelfTransfer.name, TransactionType.CardRepayment.name) && row.ownership != SpendingOwnership.SelfTransfer.name
+            row.reviewState != ReviewState.NeedsReview.name && row.spendType == SpendingType.Expense.name &&
+            row.transactionType !in listOf(TransactionType.SelfTransfer.name, TransactionType.CardRepayment.name) && row.ownership != SpendingOwnership.SelfTransfer.name
         fun sum(direction: Direction, daily: Boolean = false) = rows.filter { eligible(it, daily) && it.direction == direction.name &&
             true }
             .fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf(row.amountMinor ?: 0) }
@@ -231,6 +232,7 @@ class TransactionRepository(private val context: Context, private val namespace:
         val debits = dao.between(start, end).filter { row ->
             row.id !in reversedOriginals && row.direction == Direction.Debit.name &&
                 row.status == TransactionStatus.Successful.name && row.reviewState != ReviewState.NeedsReview.name &&
+                row.spendType == SpendingType.Expense.name &&
                 row.transactionType !in listOf(TransactionType.SelfTransfer.name, TransactionType.CardRepayment.name) &&
                 row.ownership != SpendingOwnership.SelfTransfer.name
         }
@@ -258,6 +260,7 @@ class TransactionRepository(private val context: Context, private val namespace:
             row.channel == channel && row.bankName == bankName && row.maskedAccountHint == maskedAccountHint &&
                 row.id !in reversedOriginals && row.direction == Direction.Debit.name &&
                 row.status == TransactionStatus.Successful.name && row.reviewState != ReviewState.NeedsReview.name &&
+                row.spendType == SpendingType.Expense.name &&
                 row.transactionType !in listOf(TransactionType.SelfTransfer.name, TransactionType.CardRepayment.name) &&
                 row.ownership != SpendingOwnership.SelfTransfer.name
         }.sortedByDescending { it.effectiveTimestamp }
@@ -384,7 +387,8 @@ class TransactionRepository(private val context: Context, private val namespace:
                             confidence = parsed.confidence, reviewState = if (review) "NeedsReview" else "AutoRecorded",
                             parserVersion = parsed.parserVersion, createdAt = now, updatedAt = now,
                             ownership = if (parsed.transactionType == TransactionType.SelfTransfer) SpendingOwnership.SelfTransfer.name else SpendingOwnership.Personal.name,
-                            personalShareMinor = parsed.amountMinor.takeIf { parsed.transactionType == TransactionType.SelfTransfer }, bankName = parsed.bankName)
+                            personalShareMinor = parsed.amountMinor.takeIf { parsed.transactionType == TransactionType.SelfTransfer }, bankName = parsed.bankName,
+                            spendType = if (parsed.transactionType == TransactionType.SelfTransfer) SpendingType.TransferToSelf.name else SpendingType.Expense.name)
                         candidates += ImportCandidate(row, alternate, message.sender)
                     }
                     seen.addAll(keys)
@@ -467,7 +471,8 @@ class TransactionRepository(private val context: Context, private val namespace:
             confidence = parsed.confidence, reviewState = if (parsed.decision == ParseDecision.Record) ReviewState.AutoRecorded.name else ReviewState.NeedsReview.name,
             parserVersion = parsed.parserVersion, createdAt = now, updatedAt = now, referenceHash = referenceHash)
         if (parsed.transactionType == TransactionType.SelfTransfer) {
-            row = row.copy(ownership = SpendingOwnership.SelfTransfer.name, personalShareMinor = parsed.amountMinor)
+            row = row.copy(ownership = SpendingOwnership.SelfTransfer.name, personalShareMinor = parsed.amountMinor,
+                spendType = SpendingType.TransferToSelf.name)
         }
         val dao = db().transactions()
         row = row.copy(paymentSourceId = mappedSourceId(row.channel, row.maskedAccountHint, sms.sender, dao))
@@ -477,6 +482,7 @@ class TransactionRepository(private val context: Context, private val namespace:
             if (adjustment) {
                 val originals = referenceHash?.let(dao::byReference).orEmpty().filter {
                     it.sourceType == "SMS" && !it.isUserCorrected && it.status == "Successful" && it.direction == "Debit" &&
+                        it.spendType == SpendingType.Expense.name &&
                         it.transactionType !in listOf("Refund", "Reversal", "SelfTransfer") && it.reviewState == "AutoRecorded" &&
                         it.amountMinor == row.amountMinor && it.currency == row.currency &&
                         it.maskedAccountHint != null && it.maskedAccountHint == row.maskedAccountHint &&
@@ -519,7 +525,7 @@ class TransactionRepository(private val context: Context, private val namespace:
             referenceHash = old?.referenceHash, linkedOriginalId = old?.linkedOriginalId,
             category = input.category.trim(), ownership = input.normalizedOwnership().name,
             groupLabel = input.groupLabel.trim().takeIf { input.normalizedOwnership() == SpendingOwnership.Group && it.isNotBlank() }, personalShareMinor = input.personalShareMinor(),
-            repaidMinor = input.repaidMinor(), paymentSourceId = input.paymentSourceId)
+            repaidMinor = input.repaidMinor(), paymentSourceId = input.paymentSourceId, spendType = input.normalizedSpendType().name)
         db().runInTransaction {
             if (old == null) dao.insert(row) else {
                 val linkSensitiveTypes = setOf("Refund", "Reversal", "SelfTransfer", "CardRepayment")
@@ -537,7 +543,8 @@ class TransactionRepository(private val context: Context, private val namespace:
                     "status" to r.status, "channel" to r.channel, "transactionType" to r.transactionType, "effectiveTimestamp" to r.effectiveTimestamp.toString(),
                     "counterpartyLabel" to r.counterpartyLabel, "maskedAccountHint" to r.maskedAccountHint, "userNotes" to r.userNotes, "reviewState" to r.reviewState,
                     "category" to r.category, "ownership" to r.ownership, "groupLabel" to r.groupLabel,
-                    "personalShareMinor" to r.personalShareMinor?.toString(), "repaidMinor" to r.repaidMinor.toString(), "paymentSourceId" to r.paymentSourceId)
+                    "personalShareMinor" to r.personalShareMinor?.toString(), "repaidMinor" to r.repaidMinor.toString(),
+                    "paymentSourceId" to r.paymentSourceId, "spendType" to r.spendType)
                 val before = fields(old)
                 dao.update(row)
                 dao.audit(fields(row).filter { (key, value) -> before[key] != value }.map { (key, value) ->
@@ -550,25 +557,33 @@ class TransactionRepository(private val context: Context, private val namespace:
 
     /** Labels never confirm a payment or change its parsed financial fields. */
     suspend fun classify(id: String, category: String, ownership: SpendingOwnership,
-        group: String = "", share: String = "", repaid: String = "") = locked {
+        group: String = "", share: String = "", repaid: String = "",
+        spendType: SpendingType = SpendingType.Expense) = locked {
         val dao = db().transactions()
         val old = requireNotNull(dao.get(id)) { "This transaction no longer exists." }
         val amount = requireNotNull(old.amountMinor) { "Review the amount first using Edit all details." }
-        val input = ManualInput(java.math.BigDecimal.valueOf(amount, 2).toPlainString(), Direction.Debit,
+        val input = ManualInput(java.math.BigDecimal.valueOf(amount, 2).toPlainString(), Direction.valueOf(old.direction),
             old.effectiveTimestamp, TransactionType.Other, category = category, ownership = ownership,
-            groupLabel = group, personalShare = share, repaid = repaid)
+            groupLabel = group, personalShare = share, repaid = repaid, spendType = spendType)
         input.validate()
         val now = System.currentTimeMillis()
-        val type = if (ownership == SpendingOwnership.SelfTransfer) "SelfTransfer"
-            else if (old.transactionType == "SelfTransfer") "Other" else old.transactionType
-        val row = old.copy(category = category.trim(), ownership = ownership.name,
-            groupLabel = group.trim().takeIf { ownership == SpendingOwnership.Group },
+        val nextSpendType = input.normalizedSpendType()
+        val nextOwnership = input.normalizedOwnership()
+        val type = when {
+            nextSpendType == SpendingType.TransferToSelf -> TransactionType.SelfTransfer.name
+            old.transactionType == TransactionType.SelfTransfer.name -> TransactionType.Other.name
+            else -> old.transactionType
+        }
+        val row = old.copy(category = category.trim(), ownership = nextOwnership.name,
+            groupLabel = group.trim().takeIf { nextOwnership == SpendingOwnership.Group },
             personalShareMinor = input.personalShareMinor(), repaidMinor = input.repaidMinor(),
-            transactionType = type, linkedOriginalId = old.linkedOriginalId.takeIf { type == old.transactionType },
+            transactionType = type, spendType = nextSpendType.name,
+            linkedOriginalId = old.linkedOriginalId.takeIf { type == old.transactionType },
             isUserCorrected = true, updatedAt = now)
         fun fields(r: TransactionEntity) = mapOf("category" to r.category, "ownership" to r.ownership,
             "groupLabel" to r.groupLabel, "personalShareMinor" to r.personalShareMinor?.toString(),
-            "repaidMinor" to r.repaidMinor.toString(), "transactionType" to r.transactionType)
+            "repaidMinor" to r.repaidMinor.toString(), "transactionType" to r.transactionType,
+            "spendType" to r.spendType)
         db().runInTransaction {
             if (type != old.transactionType) dao.unlinkFrom(id)
             dao.update(row)

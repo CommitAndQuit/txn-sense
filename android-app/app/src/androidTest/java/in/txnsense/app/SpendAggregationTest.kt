@@ -44,4 +44,46 @@ class SpendAggregationTest {
             assertNull("spend-only method has no income", income["UPI"])
         } finally { repo.eraseAll(); repo.close() }
     }
+
+    @Test fun non_expense_entries_are_excluded_from_spend_but_remain_in_history() = runBlocking {
+        val repo = repository()
+        val now = System.currentTimeMillis()
+        try {
+            val expense = repo.save(ManualInput("100.00", Direction.Debit, now,
+                TransactionType.MerchantPayment, channel = Channel.UPI))
+            val investment = repo.save(ManualInput("200.00", Direction.Debit, now,
+                TransactionType.Other, channel = Channel.UPI, spendType = SpendingType.Investment))
+            val family = repo.save(ManualInput("300.00", Direction.Debit, now,
+                TransactionType.Other, channel = Channel.BankTransfer, ownership = SpendingOwnership.ForOther,
+                spendType = SpendingType.TransferToFamily))
+            val self = repo.save(ManualInput("400.00", Direction.Debit, now,
+                TransactionType.Other, channel = Channel.BankTransfer, spendType = SpendingType.TransferToSelf))
+            val investmentCredit = repo.save(ManualInput("50.00", Direction.Credit, now,
+                TransactionType.Other, channel = Channel.BankTransfer, spendType = SpendingType.Investment))
+
+            val snapshot = repo.snapshot()
+            assertEquals(5, snapshot.rows.size)
+            assertEquals("10000", snapshot.debit.toString())
+            assertEquals("5000", snapshot.credit.toString())
+            assertEquals("10000", snapshot.dailyDebit.toString())
+            assertEquals("0", snapshot.paidForOthers.toString())
+            assertEquals("0", snapshot.outstandingRepayments.toString())
+            assertEquals(setOf(expense, investmentCredit), repo.snapshot(filter = "Personal").rows.map { it.id }.toSet())
+
+            val spends = repo.spendByMethod().associateBy { it.channel }
+            assertEquals(10000L, spends.getValue("UPI").netSpendMinor)
+            assertNull(spends["BankTransfer"])
+            assertEquals(5000L, repo.incomeByMethod().associateBy { it.channel }.getValue("BankTransfer").incomeMinor)
+
+            val overview = repo.spendOverview()
+            assertEquals(10000L, overview.totalSpendMinor)
+            assertEquals(listOf(expense), overview.recentSpends.map { it.id })
+
+            assertEquals("Investment", repo.get(investment)!!.spendType)
+            assertEquals("TransferToFamily", repo.get(family)!!.spendType)
+            assertEquals("TransferToSelf", repo.get(self)!!.spendType)
+            assertEquals("Expense", repo.get(investmentCredit)!!.spendType)
+            assertNull(repaymentSummary(repo.get(family)!!))
+        } finally { repo.eraseAll(); repo.close() }
+    }
 }

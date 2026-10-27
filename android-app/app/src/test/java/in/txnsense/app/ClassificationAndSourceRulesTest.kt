@@ -3,6 +3,7 @@ package `in`.txnsense.app
 import `in`.txnsense.app.core.model.Channel
 import `in`.txnsense.app.core.model.Direction
 import `in`.txnsense.app.core.model.SpendingOwnership
+import `in`.txnsense.app.core.model.SpendingType
 import `in`.txnsense.app.core.model.TransactionType
 import `in`.txnsense.app.data.ManualInput
 import `in`.txnsense.app.data.PaymentSourceEntity
@@ -66,5 +67,42 @@ class ClassificationAndSourceRulesTest {
         personal.validate()
         assertEquals(30000L, personal.personalShareMinor())
         assertEquals(0L, personal.repaidMinor())
+    }
+
+    @Test fun legacy_self_transfer_normalizes_to_non_expense_transfer() {
+        val input = ManualInput("100", Direction.Debit, 1, TransactionType.SelfTransfer)
+        assertEquals(SpendingType.TransferToSelf, input.normalizedSpendType())
+        assertEquals(SpendingOwnership.SelfTransfer, input.normalizedOwnership())
+    }
+
+    @Test fun investment_and_family_transfer_are_not_owned_spending() {
+        val investment = ManualInput("100", Direction.Debit, 1, TransactionType.Other,
+            ownership = SpendingOwnership.ForOther, repaid = "10", spendType = SpendingType.Investment)
+        investment.validate()
+        assertEquals(SpendingOwnership.Personal, investment.normalizedOwnership())
+        assertEquals(10000L, investment.personalShareMinor())
+        assertEquals(0L, investment.repaidMinor())
+
+        val family = ManualInput("100", Direction.Debit, 1, TransactionType.Other,
+            ownership = SpendingOwnership.Group, groupLabel = "Family", personalShare = "25",
+            spendType = SpendingType.TransferToFamily)
+        family.validate()
+        assertEquals(SpendingOwnership.Personal, family.normalizedOwnership())
+        assertEquals(10000L, family.personalShareMinor())
+    }
+
+    @Test fun credits_normalize_spending_classification_to_expense() {
+        val input = ManualInput("100", Direction.Credit, 1, TransactionType.SalaryIncome,
+            spendType = SpendingType.Investment)
+        assertEquals(SpendingType.Expense, input.normalizedSpendType())
+        assertEquals(SpendingType.TransferToSelf,
+            input.copy(spendType = SpendingType.TransferToSelf).normalizedSpendType())
+    }
+
+    @Test fun explicit_transfer_to_self_sets_legacy_ownership_and_type() {
+        val input = ManualInput("100", Direction.Debit, 1, TransactionType.Other,
+            spendType = SpendingType.TransferToSelf)
+        assertEquals(TransactionType.SelfTransfer, input.normalizedType())
+        assertEquals(SpendingOwnership.SelfTransfer, input.normalizedOwnership())
     }
 }
