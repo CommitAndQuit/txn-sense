@@ -10,7 +10,7 @@ data class ManualInput(
     val accountHint: String = "",
     val category: String = "Other", val ownership: SpendingOwnership = SpendingOwnership.Personal,
     val groupLabel: String = "", val personalShare: String = "", val repaid: String = "",
-    val paymentSourceId: String? = null,
+    val paymentSourceId: String? = null, val spendType: SpendingType = SpendingType.Expense,
 ) {
     fun amountMinor(): Long {
         require(amount.matches(Regex("[0-9]{1,16}(\\.[0-9]{1,2})?"))) { "Enter a positive amount with up to two decimal places." }
@@ -32,22 +32,32 @@ data class ManualInput(
         require(category.isNotBlank() && category.length <= 40) { "Choose a category." }
         val share = personalShareMinor(total)
         require(share in 0..total) { "Your share must be between zero and the total amount." }
-        require(ownership != SpendingOwnership.Group || groupLabel.trim().isNotBlank()) { "Name the group." }
+        require(normalizedOwnership() != SpendingOwnership.Group || groupLabel.trim().isNotBlank()) { "Name the group." }
         require(repaidMinor(total, share) in 0..(total - share)) { "Repaid amount cannot exceed the amount others owe." }
     }
+    fun normalizedSpendType(): SpendingType = when {
+        spendType == SpendingType.TransferToSelf ||
+            ownership == SpendingOwnership.SelfTransfer || type == TransactionType.SelfTransfer -> SpendingType.TransferToSelf
+        direction == Direction.Credit -> SpendingType.Expense
+        else -> spendType
+    }
     fun normalizedType(): TransactionType = when {
-        ownership == SpendingOwnership.SelfTransfer || type == TransactionType.SelfTransfer -> TransactionType.SelfTransfer
+        normalizedSpendType() == SpendingType.TransferToSelf -> TransactionType.SelfTransfer
         else -> type
     }
-    fun normalizedOwnership(): SpendingOwnership =
-        if (ownership == SpendingOwnership.SelfTransfer || type == TransactionType.SelfTransfer) SpendingOwnership.SelfTransfer else ownership
-    fun personalShareMinor(total: Long = amountMinor()): Long = when (ownership) {
+    fun normalizedOwnership(): SpendingOwnership = when {
+        normalizedSpendType() == SpendingType.TransferToSelf -> SpendingOwnership.SelfTransfer
+        normalizedSpendType() != SpendingType.Expense -> SpendingOwnership.Personal
+        ownership == SpendingOwnership.SelfTransfer || type == TransactionType.SelfTransfer -> SpendingOwnership.SelfTransfer
+        else -> ownership
+    }
+    fun personalShareMinor(total: Long = amountMinor()): Long = when (normalizedOwnership()) {
         SpendingOwnership.Personal, SpendingOwnership.SelfTransfer -> total
         SpendingOwnership.ForOther -> 0L
         SpendingOwnership.Group -> parseOptionalAmount(personalShare, "Enter your share with up to two decimal places.")
     }
     fun repaidMinor(total: Long = amountMinor(), share: Long = personalShareMinor(total)): Long =
-        if (ownership !in listOf(SpendingOwnership.ForOther, SpendingOwnership.Group) || repaid.isBlank()) 0
+        if (normalizedOwnership() !in listOf(SpendingOwnership.ForOther, SpendingOwnership.Group) || repaid.isBlank()) 0
         else parseOptionalAmount(repaid, "Enter repaid amount with up to two decimal places.")
     private fun parseOptionalAmount(value: String, error: String): Long {
         require(value.matches(Regex("[0-9]{1,16}(\\.[0-9]{1,2})?"))) { error }

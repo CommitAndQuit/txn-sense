@@ -256,6 +256,30 @@ class HistoricalImportTest {
         } finally { repository.eraseAll(); repository.close() }
     }
 
+    @Test fun reclassified_import_is_not_readded_as_spend() = runBlocking {
+        grant()
+        val repository = repository()
+        val now = System.currentTimeMillis()
+        try {
+            val message = HistoricalSms("TEST", now, 0, "INR 42 debited via UPI")
+            repository.commitImport(repository.previewImport(source(message), now))
+            val row = repository.snapshot().rows.single()
+            repository.classify(row.id, "Investment", SpendingOwnership.Personal,
+                spendType = SpendingType.Investment)
+            assertEquals("0", repository.snapshot().debit.toString())
+            assertEquals("Investment", repository.get(row.id)!!.spendType)
+
+            val again = repository.previewImport(source(message), now)
+            assertEquals(0, again.ready)
+            assertEquals(1, again.duplicates)
+            val result = repository.commitImport(again)
+            assertEquals(0, result.inserted)
+            assertEquals(1, repository.snapshot().rows.size)
+            assertEquals("Investment", repository.get(row.id)!!.spendType)
+            assertEquals("0", repository.snapshot().debit.toString())
+        } finally { repository.eraseAll(); repository.close() }
+    }
+
     @Test fun imported_and_live_messages_use_the_same_conservative_source_resolution() = runBlocking {
         grant()
         val repository = repository()

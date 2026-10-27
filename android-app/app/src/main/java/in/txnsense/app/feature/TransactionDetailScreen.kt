@@ -100,7 +100,8 @@ fun TransactionDetailScreen(
                     } else Text(friendly(r.reviewState), style = MaterialTheme.typography.bodySmall, color = brand.textSecondary)
 
                     Text("Category: ${r.category}", style = MaterialTheme.typography.bodyMedium)
-                    if (r.ownership != "Personal") Text("For: ${friendly(r.ownership)}", style = MaterialTheme.typography.bodyMedium)
+                    if (r.spendType != "Expense") Text("Counts as: ${friendly(r.spendType)}", style = MaterialTheme.typography.bodyMedium)
+                    if (r.ownership != "Personal" && r.spendType == "Expense") Text("For: ${friendly(r.ownership)}", style = MaterialTheme.typography.bodyMedium)
                     r.groupLabel?.let { Text("Group: $it", style = MaterialTheme.typography.bodyMedium) }
                     repaymentSummary(r)?.let { (label, owed) -> Text("$label: ${money(owed)}", style = MaterialTheme.typography.bodyMedium) }
                     r.userNotes?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }

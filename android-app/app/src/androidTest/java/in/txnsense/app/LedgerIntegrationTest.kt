@@ -225,6 +225,10 @@ class LedgerIntegrationTest {
             val refund = repository.snapshot().rows.first()
             assertEquals(original.id, refund.linkedOriginalId)
             assertEquals("4200", repository.snapshot().credit.toString())
+            repository.classify(original.id, "Investment", SpendingOwnership.Personal,
+                spendType = SpendingType.Investment)
+            assertEquals("Investment", repository.get(original.id)!!.spendType)
+            assertTrue(repository.spendByMethod().isEmpty())
             repository.delete(original.id)
             assertNull(repository.get(refund.id)!!.linkedOriginalId)
         } finally { repository.eraseAll(); repository.close() }
@@ -468,6 +472,44 @@ class LedgerIntegrationTest {
             // Runtime revocation kills the instrumentation process. Consent remains off;
             // these grants apply only to the explicitly authorized synthetic test emulator.
         }
+    }
+
+    @Test fun version_six_ledger_migrates_non_expense_classification() = runBlocking {
+        val name = namespace()
+        val repository = TransactionRepository(context, name)
+        val password = DeviceSecrets(context, name).databasePassphrase(false)
+        System.loadLibrary("sqlcipher")
+        val schema = org.json.JSONObject(InstrumentationRegistry.getInstrumentation().context.assets
+            .open("in.txnsense.app.data.FinanceDatabase/6.json").bufferedReader().use { it.readText() }).getJSONObject("database")
+        val helper = net.zetetic.database.sqlcipher.SupportOpenHelperFactory(password).create(
+            androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context).name("$name.db")
+                .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(6) {
+                    override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                        val entities = schema.getJSONArray("entities")
+                        for (i in 0 until entities.length()) {
+                            val entity = entities.getJSONObject(i)
+                            db.execSQL(entity.getString("createSql").replace("\${TABLE_NAME}", entity.getString("tableName")))
+                            val indices = entity.getJSONArray("indices")
+                            for (j in 0 until indices.length()) db.execSQL(indices.getJSONObject(j).getString("createSql")
+                                .replace("\${TABLE_NAME}", entity.getString("tableName")))
+                        }
+                        val setup = schema.getJSONArray("setupQueries")
+                        for (i in 0 until setup.length()) db.execSQL(setup.getString(i))
+                    }
+                    override fun onUpgrade(db: androidx.sqlite.db.SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = error("Unexpected legacy upgrade")
+                }).build())
+        try {
+            try {
+                val old = helper.writableDatabase
+                val now = System.currentTimeMillis()
+                old.execSQL("INSERT INTO transactions (id, sourceType, sourceTimestamp, effectiveTimestamp, amountMinor, currency, direction, status, channel, transactionType, confidence, reviewState, parserVersion, isUserCorrected, createdAt, updatedAt) VALUES ('expense', 'Manual', $now, $now, 4200, 'INR', 'Debit', 'Successful', 'CashManual', 'Other', 0, 'Confirmed', 0, 1, $now, $now)")
+                old.execSQL("INSERT INTO transactions (id, sourceType, sourceTimestamp, effectiveTimestamp, amountMinor, currency, direction, status, channel, transactionType, confidence, reviewState, parserVersion, isUserCorrected, createdAt, updatedAt) VALUES ('transfer', 'Manual', $now, $now, 5100, 'INR', 'Transfer', 'Successful', 'CashManual', 'SelfTransfer', 0, 'Confirmed', 0, 1, $now, $now)")
+            } finally { helper.close(); password.fill(0) }
+            assertEquals("Expense", repository.get("expense")!!.spendType)
+            assertEquals("TransferToSelf", repository.get("transfer")!!.spendType)
+            assertEquals("4200", repository.snapshot().debit.toString())
+            assertEquals(2, repository.snapshot().rows.size)
+        } finally { helper.close(); password.fill(0); repository.eraseAll(); repository.close() }
     }
 
     @Test fun manifest_and_packaged_backup_rules_enforce_local_only() {

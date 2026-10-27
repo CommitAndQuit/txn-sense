@@ -297,7 +297,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                                 Text("Today: ${money(it.dailyDebit)} out · ${money(it.dailyCredit)} in", style = MaterialTheme.typography.bodySmall)
                             if (showSummaryDetails) {
                                 AlertDialog(onDismissRequest = { showSummaryDetails = false }, title = { Text("How totals work") },
-                                    text = { Text("Money in and out cover the selected month. They exclude self transfers, card repayments, failed or unconfirmed payments, and reversed originals.\n\nYour spending counts your share of money out. Paid for others is the remaining share. Still owed includes unpaid amounts across all dates.\n\nToday shows eligible payments for today.") },
+                                    text = { Text("Money in and out cover the selected month. They exclude investments, family transfers, self transfers, card repayments, failed or unconfirmed payments, and reversed originals.\n\nYour spending counts your share of money out. Paid for others is the remaining share. Still owed includes unpaid amounts across all dates.\n\nToday shows eligible payments for today.") },
                                     confirmButton = { TextButton(onClick = { showSummaryDetails = false }) { Text("Got it") } })
                             }
                         } }
@@ -507,6 +507,7 @@ private fun friendlyFilter(value: String): String = when (value) {
 }
 
 internal fun repaymentSummary(row: TransactionEntity, reversedOriginalIds: Set<String> = emptySet()): Pair<String, Long>? {
+    if (row.spendType != "Expense") return null
     if (row.ownership !in listOf("ForOther", "Group") || row.direction != "Debit" || row.amountMinor == null) return null
     if (row.status in listOf("Failed", "Reversed") || row.transactionType in listOf("SelfTransfer", "CardRepayment", "Refund", "Reversal") || row.id in reversedOriginalIds) return null
     val personal = row.personalShareMinor ?: row.amountMinor
@@ -517,7 +518,8 @@ internal fun repaymentSummary(row: TransactionEntity, reversedOriginalIds: Set<S
 
 private fun transactionLabels(row: TransactionEntity): String? = buildList {
     if (row.category != "Other") add(friendly(row.category))
-    if (row.ownership != "Personal") add(friendly(row.ownership))
+    if (row.spendType != "Expense") add(friendly(row.spendType))
+    else if (row.ownership != "Personal") add(friendly(row.ownership))
     row.groupLabel?.takeIf { it.isNotBlank() }?.let(::add)
 }.joinToString(" · ").ifBlank { null }
 

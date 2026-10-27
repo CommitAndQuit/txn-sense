@@ -24,6 +24,10 @@ enum class ReviewState { AutoRecorded, NeedsReview, Confirmed }
 /** Who ultimately bears this cost. Kept separate from the payment channel and category. */
 enum class SpendingOwnership { Personal, ForOther, Group, SelfTransfer }
 
+/** How this transaction contributes to the ledger's spend view. Non-expense entries stay in
+ *  history and can feed a future investment section without being counted as spending. */
+enum class SpendingType { Expense, Investment, TransferToSelf, TransferToFamily }
+
 data class ParseAssessment(
     val decision: ParseDecision,
     val amountMinor: Long?,

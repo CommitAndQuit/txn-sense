@@ -44,6 +44,7 @@ The official `f-droid.org` catalog submission is deferred while the self-hosted 
 - [x] **Deterministic Template Engine**: ~90+ bank layouts with sender-based bank and payment channel derivation.
 - [x] **Manual Transaction Management**: Add, edit, categorize, or delete cash and digital transactions with custom timestamps and tags.
 - [x] **Spend & Income Tracking**: Daily, monthly, and per-payment-method spend analytics with refund netting.
+- [x] **Non-Expense Classification**: Mark investments, self-transfers, and family transfers as non-spending; they remain in full ledger history with a badge.
 - [x] **Transaction Review Queue**: Safeguards uncertain amounts or unrecognized formats for manual verification before booking.
 - [x] **Past SMS Import**: Optional on-device scan of the last 3 months of inbox messages with safety previews and undo support.
 - [x] **Pull-to-Refresh SMS Catch-Up**: Refresh Home to import new SMS since the last successful scan; uncertain records still go to Review.

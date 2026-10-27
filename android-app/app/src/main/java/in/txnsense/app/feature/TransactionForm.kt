@@ -41,6 +41,9 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
     var hint by rememberSaveable(existing?.id) { mutableStateOf(existing?.maskedAccountHint?.takeLast(4) ?: "") }
     var category by rememberSaveable(existing?.id) { mutableStateOf(existing?.category ?: "Other") }
     var ownership by rememberSaveable(existing?.id) { mutableStateOf(existing?.ownership ?: "Personal") }
+    var spendType by rememberSaveable(existing?.id) {
+        mutableStateOf(existing?.spendType ?: if (existing?.transactionType == "SelfTransfer" || existing?.ownership == "SelfTransfer") "TransferToSelf" else "Expense")
+    }
     var groupLabel by rememberSaveable(existing?.id) { mutableStateOf(existing?.groupLabel ?: "") }
     var personalShare by rememberSaveable(existing?.id) { mutableStateOf(existing?.personalShareMinor?.let { BigDecimal.valueOf(it, 2).toPlainString() } ?: "") }
     var repaid by rememberSaveable(existing?.id) { mutableStateOf(existing?.repaidMinor?.takeIf { it > 0 }?.let { BigDecimal.valueOf(it, 2).toPlainString() } ?: "") }
@@ -51,9 +54,24 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val initialFields = rememberSaveable(existing?.id) { listOf(amount, direction, status, type, channel, date, label, notes, hint, category, ownership, groupLabel, personalShare, repaid, sourceId) }
-    val dirty = initialFields != listOf(amount, direction, status, type, channel, date, label, notes, hint, category, ownership, groupLabel, personalShare, repaid, sourceId)
+    val initialFields = rememberSaveable(existing?.id) { listOf(amount, direction, status, type, channel, date, label, notes, hint, category, ownership, spendType, groupLabel, personalShare, repaid, sourceId) }
+    val dirty = initialFields != listOf(amount, direction, status, type, channel, date, label, notes, hint, category, ownership, spendType, groupLabel, personalShare, repaid, sourceId)
     SideEffect { onDirtyChange(dirty) }
+    fun chooseSpendType(option: String) {
+        spendType = option
+        when (option) {
+            "TransferToSelf" -> { ownership = "SelfTransfer"; type = "SelfTransfer" }
+            "Investment", "TransferToFamily" -> {
+                if (ownership == "SelfTransfer") ownership = "Personal"
+                if (type == "SelfTransfer") type = "Other"
+                groupLabel = ""; personalShare = ""; repaid = ""
+            }
+            else -> {
+                if (ownership == "SelfTransfer") ownership = "Personal"
+                if (type == "SelfTransfer") type = "Other"
+            }
+        }
+    }
     LaunchedEffect(existing?.id) { sources = repository.paymentSources() }
     val pickerTheme = if (androidx.compose.foundation.isSystemInDarkTheme()) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert
     var discard by remember { mutableStateOf(false) }
@@ -72,30 +90,43 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         if (existing != null && amount.isBlank()) Text("Enter the transaction amount; it could not be identified.", color = MaterialTheme.colorScheme.error)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("Debit", "Credit", "Transfer").forEach { option ->
-                FilterChip(selected = direction == option, onClick = { direction = option }, label = { Text(friendly(option)) })
+                FilterChip(selected = direction == option, onClick = {
+                    direction = option
+                    if (option == "Credit" && spendType !in listOf("Expense", "TransferToSelf")) spendType = "Expense"
+                }, label = { Text(friendly(option)) })
             }
         }
         if (direction == "Unknown") Text("Choose money out, money in, or transfer.", color = MaterialTheme.colorScheme.error)
         OutlinedTextField(label, { label = it.take(60) }, label = { Text("Label (optional)") }, supportingText = { Text("A short description, not personal or account details.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         }
         Choice("Category", category, listOf("Other", "Food", "Travel", "Shopping", "Bills", "Health", "Education", "Entertainment", "Cash")) { category = it }
-        Text("Who was this payment for?", style = MaterialTheme.typography.labelLarge)
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Personal", "ForOther", "Group", "SelfTransfer").forEach { option ->
-                FilterChip(selected = ownership == option, onClick = {
-                    ownership = option
-                    type = if (option == "SelfTransfer") "SelfTransfer" else if (type == "SelfTransfer") "Other" else type
-                    if (option !in listOf("ForOther", "Group")) repaid = ""
-                    if (option != "Group") { groupLabel = ""; personalShare = "" }
-                }, label = { Text(friendly(option)) })
+        if (direction != "Credit") {
+            Text("How should this count?", style = MaterialTheme.typography.labelLarge)
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("Expense", "Investment", "TransferToSelf", "TransferToFamily").forEach { option ->
+                    FilterChip(selected = spendType == option, onClick = { chooseSpendType(option) }, label = { Text(friendly(option)) })
+                }
             }
+            if (spendType != "Expense") Text("This stays in your ledger but is not counted as spending.", style = MaterialTheme.typography.bodySmall)
         }
-        if (ownership == "Group") {
-            OutlinedTextField(groupLabel, { groupLabel = it.take(40) }, label = { Text("Group name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(personalShare, { personalShare = it }, label = { Text("Your share (INR)") }, supportingText = { Text("The rest is tracked as money others owe you.") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
-        }
-        if (ownership == "ForOther" || ownership == "Group") {
-            OutlinedTextField(repaid, { repaid = it }, label = { Text("Already repaid (INR, optional)") }, supportingText = { Text("Update this when people repay you.") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+        if (spendType == "Expense") {
+            Text("Who was this payment for?", style = MaterialTheme.typography.labelLarge)
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("Personal", "ForOther", "Group").forEach { option ->
+                    FilterChip(selected = ownership == option, onClick = {
+                        ownership = option
+                        if (option !in listOf("ForOther", "Group")) repaid = ""
+                        if (option != "Group") { groupLabel = ""; personalShare = "" }
+                    }, label = { Text(friendly(option)) })
+                }
+            }
+            if (ownership == "Group") {
+                OutlinedTextField(groupLabel, { groupLabel = it.take(40) }, label = { Text("Group name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(personalShare, { personalShare = it }, label = { Text("Your share (INR)") }, supportingText = { Text("The rest is tracked as money others owe you.") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+            }
+            if (ownership == "ForOther" || ownership == "Group") {
+                OutlinedTextField(repaid, { repaid = it }, label = { Text("Already repaid (INR, optional)") }, supportingText = { Text("Update this when people repay you.") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+            }
         }
         if (compact) TextButton(onClick = { compact = false }) { Text("Edit all details") }
         if (!compact) {
@@ -116,13 +147,15 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         if (status == "Unknown") Choice("Payment status — please check", status, TransactionStatus.entries.map { it.name }) { status = it }
         if (type == "Unknown") Choice("Transaction type — please choose", type, TransactionType.entries.map { it.name }) {
             type = it
-            ownership = if (it == "SelfTransfer") "SelfTransfer" else if (ownership == "SelfTransfer") "Personal" else ownership
+            if (it == "SelfTransfer") chooseSpendType("TransferToSelf")
+            else if (spendType == "TransferToSelf") { spendType = "Expense"; ownership = "Personal" }
         }
         TextButton(onClick = { optional = !optional }) { Text(if (optional) "Fewer details" else "More details") }
         if (optional) {
             if (type != "Unknown") Choice("Transaction type", type, TransactionType.entries.map { it.name }) {
                 type = it
-                ownership = if (it == "SelfTransfer") "SelfTransfer" else if (ownership == "SelfTransfer") "Personal" else ownership
+                if (it == "SelfTransfer") chooseSpendType("TransferToSelf")
+                else if (spendType == "TransferToSelf") { spendType = "Expense"; ownership = "Personal" }
             }
             if (status != "Unknown") Choice("Payment status", status, TransactionStatus.entries.map { it.name }) { status = it }
             OutlinedTextField(hint, { hint = it }, label = { Text("Account last 4 digits (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -140,7 +173,8 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
                         busy = true
                         scope.launch {
                             try {
-                                repository.classify(existing.id, category, SpendingOwnership.valueOf(ownership), groupLabel, personalShare, repaid)
+                                repository.classify(existing.id, category, SpendingOwnership.valueOf(ownership),
+                                    groupLabel, personalShare, repaid, SpendingType.valueOf(spendType))
                                 onDone()
                             } catch (e: IllegalArgumentException) { error = e.message ?: "Check the fields." }
                             catch (_: Exception) { error = "Could not save. Check that the record still exists and retry." }
@@ -153,7 +187,8 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
                         val timestamp = if (existing != null && date == initialDate) existing.effectiveTimestamp else editedTimestamp
                         ManualInput(amount, Direction.valueOf(direction), timestamp,
                             TransactionType.valueOf(type), TransactionStatus.valueOf(status), Channel.valueOf(channel), label, notes, hint,
-                            category, SpendingOwnership.valueOf(ownership), groupLabel, personalShare, repaid, sourceId).also { it.validate() }
+                            category, SpendingOwnership.valueOf(ownership), groupLabel, personalShare, repaid, sourceId,
+                            SpendingType.valueOf(spendType)).also { it.validate() }
                     } catch (e: IllegalArgumentException) { error = e.message ?: "Check the fields."; null }
                     catch (_: java.time.DateTimeException) { error = "Enter a valid date and time as yyyy-MM-dd HH:mm."; null }
                     if (input != null) { busy = true; scope.launch {

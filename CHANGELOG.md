@@ -6,6 +6,11 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 - Pulling down on Home now refreshes the SMS inbox immediately instead of showing
   a one-time confirmation dialog.
+- Classify transactions as spending, investment, transfer to self, or transfer to
+  family from both the quick Categorize panel and full edit form. Non-expense
+  entries stay in ledger history with a badge but are excluded from spend totals,
+  method analytics, and repayment summaries. Existing self-transfers migrate to
+  the transfer-to-self classification.
 
 ## 0.2.0-alpha.3
 
