@@ -20,5 +20,5 @@ Description: |-
   * Spend & Income Tracking: Net spend per payment method, spend vs income totals, and monthly analytics.
   * Review Queue: Flags uncertain amounts or unfamiliar message layouts for manual verification.
 
-CurrentVersion: 0.2.0-alpha.3
-CurrentVersionCode: 13
+CurrentVersion: 0.2.0-alpha.4
+CurrentVersionCode: 14
