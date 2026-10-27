@@ -4,6 +4,10 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.2.0-alpha.5
+
+- feat(ui): add inline transaction edit panel and quick reclassify
+
 ## 0.2.0-alpha.4
 
 - Pulling down on Home now refreshes the SMS inbox immediately instead of showing
