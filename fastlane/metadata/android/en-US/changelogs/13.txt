@@ -1,0 +1,1 @@
+Alpha builds now run automatically for every push to `main`; app behavior is unchanged in this release.

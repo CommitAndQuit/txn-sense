@@ -4,6 +4,8 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.2.0-alpha.3
+
 - Alpha builds now run automatically for every push to `main`; app behavior is
   unchanged in this release.
 
