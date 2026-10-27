@@ -4,6 +4,8 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.2.0-alpha.2
+
 - Add pull-to-refresh SMS catch-up on Home. The first refresh offers a one-time
   inbox disclosure and checks the last two calendar months; later refreshes check
   only since the previous successful scan. Imported rows are committed as an
