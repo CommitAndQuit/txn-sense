@@ -72,8 +72,11 @@ access these secrets.
    workflow validates the version, creates the `v<versionName>` tag, builds and signs
    the APK, and publishes a pre-release with the APK, SHA256SUMS, signing certificate
    and notices.
-9. Publishing the release triggers **Deploy F-Droid Repository**, which downloads the
-   APK, signs the repository index, and deploys the GitHub Pages repository.
+9. After publishing the release, the release workflow explicitly dispatches
+   **Deploy F-Droid Repository**, which downloads the APK, signs the repository
+   index, and deploys the GitHub Pages repository. A release created with the
+   workflow's `GITHUB_TOKEN` does not trigger `release: published` workflows
+   automatically, so the dispatch step is required.
 10. If a release is incorrect, do not force-move the tag or replace a published APK.
     Bump the version and publish a new release.
 
