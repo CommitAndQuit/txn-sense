@@ -57,7 +57,7 @@ The official `f-droid.org` catalog submission is deferred while the self-hosted 
 
 - [x] **Configure Repository Settings**: Configured [`fdroid/config.yml`](fdroid/config.yml) with repository metadata, URL (`https://commitandquit.github.io/txn-sense/fdroid/repo`), and 512x512 branded [`fdroid/icon.png`](fdroid/icon.png).
 - [x] **Automate GitHub Actions Workflow**: Added [`.github/workflows/fdroid-repo.yml`](.github/workflows/fdroid-repo.yml) to index signed releases and deploy to GitHub Pages with a landing page and `fdroidrepos://` badge.
-- [x] **Prepare Signed Release Pipeline**: Added a manually dispatched release workflow that signs APKs with a persistent key and publishes checksums, signing certificate, and notices.
+- [x] **Prepare Signed Release Pipeline**: Every push to `main` automatically bumps the alpha version, signs the APK with a persistent key, publishes checksums, signing certificate and notices, then deploys the F-Droid repository.
 - [ ] **Add Persistent Signing Keys**: Add `ALPHA_KEYSTORE_BASE64`, `ALPHA_STORE_PASSWORD`, `FDROID_KEYSTORE_BASE64`, and `FDROID_STORE_PASSWORD` to repository Actions secrets. See [`docs/RELEASING.md`](docs/RELEASING.md).
 - [ ] **Enable GitHub Pages**: Set repository Pages source to **GitHub Actions** in GitHub settings.
 - [ ] **Test Client Subscription**: Verify adding the `fdroidrepos://` repository and installing/updating the app with the official F-Droid client.

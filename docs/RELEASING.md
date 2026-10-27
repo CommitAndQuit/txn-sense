@@ -54,35 +54,45 @@ access these secrets.
 
 ## Each release
 
-1. Update `android-app/version.properties`: choose a new `versionName` and a
-   `versionCode` greater than every previous downloadable APK. Never reuse an old code.
-2. Update `CHANGELOG.md`, including known issues and any upgrade restrictions.
-3. Update `fdroid/metadata/in.txnsense.app.yml` `CurrentVersion` and
-   `CurrentVersionCode` to match the new release, then add the localized
-   `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt` entry.
-4. Review the source changes and stage only intended files. Run
+The alpha workflow runs automatically for every push to `main`. It derives the next
+version from existing alpha tags, so no manual version or tag edit is required.
+
+Before pushing:
+
+1. Add user-visible entries under `## Unreleased` in `CHANGELOG.md`. If the section
+   is empty, release notes fall back to commit subjects since the previous alpha tag.
+2. Review the source changes and stage only intended files. Run
    `python tools/verify_public_tree.py`; no private corpus or signing files may be tracked.
-5. Run relevant JVM and emulator tests. Build and lint with
+3. Run relevant JVM and emulator tests. Build and lint with
    `./gradlew testDebugUnitTest lintDebug assembleDebug` from `android-app`.
-6. For schema changes, supply a non-destructive Room migration and test installing the
+4. For schema changes, supply a non-destructive Room migration and test installing the
    next APK over the previous official version with sample records preserved. Never
    use a destructive fallback to conceal a migration failure.
-7. Merge/push the reviewed source to `main`.
-8. In **Actions → Release Signed Alpha APK → Run workflow**, select `main`. The
-   workflow validates the version, creates the `v<versionName>` tag, builds and signs
-   the APK, and publishes a pre-release with the APK, SHA256SUMS, signing certificate
-   and notices.
-9. After publishing the release, the release workflow explicitly dispatches
-   **Deploy F-Droid Repository**, which downloads the APK, signs the repository
-   index, and deploys the GitHub Pages repository. A release created with the
-   workflow's `GITHUB_TOKEN` does not trigger `release: published` workflows
-   automatically, so the dispatch step is required.
-10. If a release is incorrect, do not force-move the tag or replace a published APK.
-    Bump the version and publish a new release.
+5. Merge/push the reviewed source to `main`.
 
-The release workflow runs only from `main` and is manually dispatched; pull-request
-workflows cannot access release secrets. Tags are created by GitHub Releases and never
-force-moved. Local builds use the developer debug signer and are not release artifacts.
+On push, the workflow:
+
+1. Increments the alpha number and chooses a `versionCode` above every previous alpha
+   tag. It also updates `android-app/version.properties`, `CHANGELOG.md`,
+   `fdroid/metadata/in.txnsense.app.yml`, and the matching Fastlane changelog.
+2. Runs public-tree validation, unit tests, lint, and the signed debug build.
+3. After a successful build, commits the version metadata with
+   `chore(release): <version> [skip ci]` and pushes it with `GITHUB_TOKEN`. That
+   generated push does not start another release workflow.
+4. Publishes the `v<versionName>` pre-release and explicitly dispatches
+   **Deploy F-Droid Repository**. A release created with `GITHUB_TOKEN` does not
+   trigger `release: published` workflows automatically, so the dispatch is required.
+
+The workflow can also be manually dispatched from `main`; it still calculates the
+next version automatically. If a run fails before the metadata commit, dispatch it
+again or push a fix to keep the same next version. If it fails after the metadata
+commit, the next run advances to a new version. If branch protection blocks the
+bot's metadata commit, allow GitHub Actions to bypass it or the release will fail
+after building. Pull-request workflows cannot access release secrets.
+
+Tags are created by GitHub Releases and never force-moved. If a release is incorrect,
+push another fix so the next version is published; do not replace a published APK.
+Local builds use the developer debug signer and are not release artifacts.
 
 ## F-Droid repository
 

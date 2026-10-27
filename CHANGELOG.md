@@ -4,6 +4,9 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+- Alpha builds now run automatically for every push to `main`; app behavior is
+  unchanged in this release.
+
 ## 0.2.0-alpha.2
 
 - Add pull-to-refresh SMS catch-up on Home. The first refresh offers a one-time

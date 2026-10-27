@@ -23,6 +23,7 @@
 !/docs/THIRD_PARTY_NOTICES.md
 /tools/*
 !/tools/verify_public_tree.py
+!/tools/prepare_release.py
 !/tools/publish-alpha.ps1
 
 # Never commit generated output, local configuration, credentials, or runtime data.

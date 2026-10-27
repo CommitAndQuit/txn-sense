@@ -6,7 +6,7 @@ from pathlib import PurePosixPath
 
 ROOT_FILES = {".gitignore", ".gitattributes", "README.md", "LICENSE", "NOTICE", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md"}
 PUBLIC_DOCS = {"PRIVACY.md", "RELEASING.md", "ROADMAP.md", "THIRD_PARTY_NOTICES.md"}
-TOOLS = {"verify_public_tree.py", "publish-alpha.ps1"}
+TOOLS = {"verify_public_tree.py", "prepare_release.py", "publish-alpha.ps1"}
 FDROID_FILES = {"config.yml", "icon.png"}
 PATTERNS = [
     ("private key", re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----")),
