@@ -2,7 +2,7 @@
 # This is a self-hosted binary repository. APKs are built and signed by the
 # GitHub release workflow, then indexed here and published through GitHub Pages.
 
-repo_url: https://commitandquit.github.io/finance-ministry/fdroid/repo
+repo_url: https://commitandquit.github.io/txn-sense/fdroid/repo
 repo_name: TxnSense Alpha
 repo_description: "Official self-hosted repository for TxnSense expense tracker alpha builds."
 repo_icon: icon.png

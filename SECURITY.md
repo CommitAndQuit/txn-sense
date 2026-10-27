@@ -7,7 +7,7 @@ or security support commitment for older APKs.
 
 ## Report privately
 
-Use [GitHub private vulnerability reporting](https://github.com/hk121902-stack/finance-ministry/security/advisories/new).
+Use [GitHub private vulnerability reporting](https://github.com/CommitAndQuit/txn-sense/security/advisories/new).
 Include the affected version, expected/actual behavior, steps using synthetic data,
 and the likely impact. Do not upload real financial data, private keys or OTPs.
 

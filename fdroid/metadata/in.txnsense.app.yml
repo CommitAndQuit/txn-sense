@@ -1,9 +1,9 @@
 Categories:
   - Money
 License: MIT
-SourceCode: https://github.com/CommitAndQuit/finance-ministry
-IssueTracker: https://github.com/CommitAndQuit/finance-ministry/issues
-Changelog: https://github.com/CommitAndQuit/finance-ministry/blob/main/CHANGELOG.md
+SourceCode: https://github.com/CommitAndQuit/txn-sense
+IssueTracker: https://github.com/CommitAndQuit/txn-sense/issues
+Changelog: https://github.com/CommitAndQuit/txn-sense/blob/main/CHANGELOG.md
 
 AuthorName: CommitAndQuit
 Summary: Offline expense tracker driven by incoming financial SMS alerts

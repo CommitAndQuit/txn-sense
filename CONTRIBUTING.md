@@ -20,7 +20,7 @@ phone/account numbers, UPI IDs, OTPs, database files, keystores or unredacted lo
 Replace every identifying value before posting a screenshot. If a parser template
 fails, recreate the sentence with synthetic details rather than copying a real SMS.
 
-Report exploitable security issues through [private vulnerability reporting](https://github.com/hk121902-stack/finance-ministry/security/advisories/new), not public issues.
+Report exploitable security issues through [private vulnerability reporting](https://github.com/CommitAndQuit/txn-sense/security/advisories/new), not public issues.
 
 ## Development expectations
 

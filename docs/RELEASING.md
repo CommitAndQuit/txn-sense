@@ -86,7 +86,7 @@ force-moved. Local builds use the developer debug signer and are not release art
 The self-hosted repository is published at:
 
 ```
-https://commitandquit.github.io/finance-ministry/fdroid/repo
+https://commitandquit.github.io/txn-sense/fdroid/repo
 ```
 
 Set the repository Pages source to **GitHub Actions**. The deploy workflow fails
@@ -97,7 +97,7 @@ repository password from `FDROID_STORE_PASSWORD`.
 The repository client link is:
 
 ```
-fdroidrepos://commitandquit.github.io/finance-ministry/fdroid/repo
+fdroidrepos://commitandquit.github.io/txn-sense/fdroid/repo
 ```
 
 `fdroidrepo://` is the HTTP scheme; use `fdroidrepos://` for this HTTPS repository.

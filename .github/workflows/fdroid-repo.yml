@@ -129,7 +129,7 @@ jobs:
             <h1>TxnSense F-Droid Repository</h1>
             <p>This is the official self-hosted F-Droid repository for <strong>TxnSense</strong>, an offline, privacy-first Android expense tracker.</p>
 
-            <a class="btn" href="fdroidrepos://commitandquit.github.io/finance-ministry/fdroid/repo${query}">Add to F-Droid</a>
+            <a class="btn" href="fdroidrepos://commitandquit.github.io/txn-sense/fdroid/repo${query}">Add to F-Droid</a>
 
             <div class="box">
               <h3>Manual Setup</h3>
@@ -137,14 +137,14 @@ jobs:
                 <li>Open the <strong>F-Droid</strong> app on your Android device.</li>
                 <li>Go to <strong>Settings → Repositories</strong>.</li>
                 <li>Tap <strong>+</strong> and enter the repository address:
-                  <br><code>https://commitandquit.github.io/finance-ministry/fdroid/repo</code>
+                  <br><code>https://commitandquit.github.io/txn-sense/fdroid/repo</code>
                 </li>
                 <li>Verify and accept the repository key fingerprint.</li>
               </ol>
               <p><strong>Repository fingerprint:</strong> <code>${fingerprint:-see the F-Droid client prompt}</code></p>
             </div>
 
-            <p><a href="https://github.com/CommitAndQuit/finance-ministry">View TxnSense on GitHub</a></p>
+            <p><a href="https://github.com/CommitAndQuit/txn-sense">View TxnSense on GitHub</a></p>
           </body>
           </html>
           EOF

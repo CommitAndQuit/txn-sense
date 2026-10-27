@@ -15,7 +15,7 @@ TxnSense is distributed through a self-hosted F-Droid repository. This is the cu
 
 **One-click add** (from an Android device with F-Droid installed):
 
-[![Add to F-Droid](https://img.shields.io/badge/Add_to_F_Droid-TxnSense_Alpha-blue?style=for-the-badge&logo=android)](fdroidrepos://commitandquit.github.io/finance-ministry/fdroid/repo)
+[![Add to F-Droid](https://img.shields.io/badge/Add_to_F_Droid-TxnSense_Alpha-blue?style=for-the-badge&logo=android)](fdroidrepos://commitandquit.github.io/txn-sense/fdroid/repo)
 
 Or manually:
 
@@ -23,7 +23,7 @@ Or manually:
 2. Open F-Droid and go to **Settings → Repositories**.
 3. Tap **+** and enter:
    ```
-   https://commitandquit.github.io/finance-ministry/fdroid/repo
+   https://commitandquit.github.io/txn-sense/fdroid/repo
    ```
 4. Verify and accept the repository signing key fingerprint shown by F-Droid.
 5. Search for **TxnSense** and install it.
@@ -54,7 +54,7 @@ The official `f-droid.org` catalog submission is deferred while the self-hosted 
 
 ### Current Work: Self-Hosted F-Droid Repository
 
-- [x] **Configure Repository Settings**: Configured [`fdroid/config.yml`](fdroid/config.yml) with repository metadata, URL (`https://commitandquit.github.io/finance-ministry/fdroid/repo`), and 512x512 branded [`fdroid/icon.png`](fdroid/icon.png).
+- [x] **Configure Repository Settings**: Configured [`fdroid/config.yml`](fdroid/config.yml) with repository metadata, URL (`https://commitandquit.github.io/txn-sense/fdroid/repo`), and 512x512 branded [`fdroid/icon.png`](fdroid/icon.png).
 - [x] **Automate GitHub Actions Workflow**: Added [`.github/workflows/fdroid-repo.yml`](.github/workflows/fdroid-repo.yml) to index signed releases and deploy to GitHub Pages with a landing page and `fdroidrepos://` badge.
 - [x] **Prepare Signed Release Pipeline**: Added a manually dispatched release workflow that signs APKs with a persistent key and publishes checksums, signing certificate, and notices.
 - [ ] **Add Persistent Signing Keys**: Add `ALPHA_KEYSTORE_BASE64`, `ALPHA_STORE_PASSWORD`, `FDROID_KEYSTORE_BASE64`, and `FDROID_STORE_PASSWORD` to repository Actions secrets. See [`docs/RELEASING.md`](docs/RELEASING.md).
