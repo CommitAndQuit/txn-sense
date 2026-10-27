@@ -4,6 +4,15 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.2.0-alpha.1
+
+- Publish TxnSense under the `in.txnsense.app` package with a new persistent
+  release signing identity and a self-hosted F-Droid repository.
+- Earlier GitHub debug APKs were signed with ephemeral CI keys. They cannot be
+  updated in place: uninstall the old debug build once before installing this
+  release. Uninstalling deletes the local ledger.
+- Network behavior is unchanged. The app still requests no Internet permission.
+
 ## 0.1.0-alpha.10
 
 - Add Money out and Money in transaction filters. They work together with the

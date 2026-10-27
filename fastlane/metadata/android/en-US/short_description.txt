@@ -1,1 +1,1 @@
-Offline expense tracker driven by incoming financial SMS alerts.
+Offline expense tracker driven by incoming financial SMS alerts

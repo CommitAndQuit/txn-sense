@@ -34,7 +34,7 @@ def allowed(name):
         return path.suffix in {".txt", ".png", ".jpg", ".jpeg"}
     if name.startswith("fdroid/"):
         if name.startswith("fdroid/metadata/"):
-            return path.suffix in {".yml", ".yaml", ".txt"}
+            return path.suffix in {".yml", ".yaml", ".txt", ".png", ".jpg", ".jpeg"}
         return len(path.parts) == 2 and path.name in FDROID_FILES
     if not name.startswith("android-app/"):
         return False

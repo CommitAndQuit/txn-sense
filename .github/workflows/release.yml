@@ -1,24 +1,20 @@
-name: Build and Release APK
+name: Release Signed Alpha APK
 
 on:
-  push:
-    branches:
-      - main
-      - release
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Git tag for the release (e.g., v1.2.3). Leave empty for automatic tagging.'
-        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build:
+  release:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    defaults:
-      run:
-        working-directory: android-app
+    timeout-minutes: 45
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,16 +22,24 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Determine Tag
-        id: tagger
-        working-directory: .
+      - name: Validate version and resolve tag
+        id: version
         run: |
-          if [ -n "${{ github.event.inputs.tag }}" ]; then
-            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
-          else
-            TAG="v1.0.${GITHUB_SHA::7}"
-            echo "tag=$TAG" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          python3 tools/verify_public_tree.py
+          version=$(sed -n 's/^versionName=//p' android-app/version.properties | tr -d '\r')
+          code=$(sed -n 's/^versionCode=//p' android-app/version.properties | tr -d '\r')
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ ]]
+          [[ "$code" =~ ^[1-9][0-9]*$ ]]
+          (( code <= 2100000000 ))
+          tag="v$version"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists. Bump version.properties and retry." >&2
+            exit 1
           fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -43,39 +47,73 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android platform and build tools
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Create local.properties
         run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" >> local.properties
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$sdk"
+          echo "sdk.dir=$sdk" >> android-app/local.properties
 
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-
-      - name: Decode signing key
-        run: |
-          echo "${SIGNING_KEY_BASE64}" | base64 -d > signing-key.jks
+      - name: Decode persistent alpha signing key
         env:
-          SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
-
-      - name: Build Debug APK
+          ALPHA_KEYSTORE_BASE64: ${{ secrets.ALPHA_KEYSTORE_BASE64 }}
         run: |
-          ./gradlew assembleDebug
+          set -euo pipefail
+          test -n "$ALPHA_KEYSTORE_BASE64"
+          umask 077
+          printf '%s' "$ALPHA_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/finance-alpha.p12"
 
-      - name: Create Git tag
-        working-directory: .
+      - name: Build signed debug alpha and run checks
+        working-directory: android-app
+        env:
+          FM_REQUIRE_ALPHA_SIGNING: 'true'
+          FM_ALPHA_KEYSTORE: ${{ runner.temp }}/finance-alpha.p12
+          FM_ALPHA_STORE_PASSWORD: ${{ secrets.ALPHA_STORE_PASSWORD }}
+        run: ./gradlew --no-daemon --console=plain testDebugUnitTest lintDebug assembleDebug
+
+      - name: Package APK, notices, checksum and certificate
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git tag -f ${{ steps.tagger.outputs.tag }}
-          git push https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git ${{ steps.tagger.outputs.tag }} --force
+          set -euo pipefail
+          mkdir -p dist
+          cp android-app/app/build/outputs/apk/debug/app-debug.apk "dist/txnsense-$VERSION-debug.apk"
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$sdk"
+          "$sdk/build-tools/36.0.0/apksigner" verify --verbose --print-certs "dist/txnsense-$VERSION-debug.apk" > dist/SIGNING-CERTIFICATE.txt
+          cp LICENSE dist/LICENSE.txt
+          cp docs/THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
+          cp android-app/app/src/main/assets/licenses/* dist/
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
 
-      - name: Wait for tag to propagate
-        run: sleep 5
-
-      - name: Create GitHub Release via CLI
-        run: |
-          gh release create ${{ steps.tagger.outputs.tag }} \
-            app/build/outputs/apk/debug/*.apk \
-            --title "Debug Release ${{ steps.tagger.outputs.tag }}" \
-            --notes "Automated debug build"
+      - name: Create published pre-release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          changes=$(awk -v heading="## $VERSION" '$0 == heading { collecting=1; next } collecting && /^## / { exit } collecting { print }' CHANGELOG.md)
+          test -n "$changes"
+          printf '%s\n' "Debug alpha $VERSION for testing; not ready for general use." '' \
+            "$changes" '' \
+            'Earlier GitHub debug installs used ephemeral CI signing keys. Uninstall the old build once before installing this APK; uninstalling deletes the local ledger. Future releases will update in place.' '' \
+            'Download the APK asset from this release. See the README for setup and permission instructions.' '' \
+            "Source commit: $GITHUB_SHA" > "$RUNNER_TEMP/release-notes.md"
+          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "TxnSense $VERSION (debug alpha)" \
+            --prerelease --notes-file "$RUNNER_TEMP/release-notes.md"
+
+      - name: Remove temporary signing file
+        if: always()
+        run: rm -f -- "$RUNNER_TEMP/finance-alpha.p12"

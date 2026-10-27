@@ -1,33 +1,19 @@
-# F-Droid Repository Configuration for TxnSense
-# Self-hosted F-Droid repository for distributing TxnSense alpha builds
+# F-Droid repository configuration for TxnSense
+# This is a self-hosted binary repository. APKs are built and signed by the
+# GitHub release workflow, then indexed here and published through GitHub Pages.
 
-archiveBaseUrl: null
-archiveName: older
-archiveDescription: "Older versions of TxnSense"
-archiveVersion: 2
-
-# Repository metadata
 repo_url: https://commitandquit.github.io/finance-ministry/fdroid/repo
 repo_name: TxnSense Alpha
 repo_description: "Official self-hosted repository for TxnSense expense tracker alpha builds."
 repo_icon: icon.png
 
-# Repository signing key configuration
-# In CI, keystore.p12 is decoded from GitHub secret FDROID_KEYSTORE_BASE64
+# Repository signing key. The keystore is restored from
+# FDROID_KEYSTORE_BASE64 by the GitHub Actions workflow and must contain the
+# repo_key alias. Passwords are injected from repository secrets at runtime.
 keystore: keystore.p12
 repo_keyalias: repo_key
+keystorepass: {env: FDROID_STORE_PASSWORD}
+keypass: {env: FDROID_STORE_PASSWORD}
 
-# Build metadata cache
-build_metadata_ttl: 7200
-
-# Accept new APKs without asking
-accept_signer: true
-
-# Allow anonymous access
-allow_any_signing_key: true
-
-# Archive policy (0 = keep all versions)
+# Keep all versions in the main repository and do not maintain an archive.
 archive_older: 0
-
-# Time to live for index cache
-index_ttl: 3600

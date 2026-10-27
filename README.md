@@ -9,6 +9,33 @@ An offline, privacy-first Android expense tracker that records transactions from
 
 ---
 
+## Install via F-Droid
+
+TxnSense is distributed through a self-hosted F-Droid repository. This is the current alpha channel.
+
+**One-click add** (from an Android device with F-Droid installed):
+
+[![Add to F-Droid](https://img.shields.io/badge/Add_to_F_Droid-TxnSense_Alpha-blue?style=for-the-badge&logo=android)](fdroidrepos://commitandquit.github.io/finance-ministry/fdroid/repo)
+
+Or manually:
+
+1. Install the [F-Droid app](https://f-droid.org/) on your device.
+2. Open F-Droid and go to **Settings → Repositories**.
+3. Tap **+** and enter:
+   ```
+   https://commitandquit.github.io/finance-ministry/fdroid/repo
+   ```
+4. Verify and accept the repository signing key fingerprint shown by F-Droid.
+5. Search for **TxnSense** and install it.
+
+**Current alpha:** `0.2.0-alpha.1`.
+
+**One-time reinstall required:** earlier GitHub debug APKs were signed with ephemeral CI keys. Uninstall the old debug build once before installing this release. Uninstalling deletes the local ledger. Releases from `0.2.0-alpha.1` onward will update in place.
+
+The official `f-droid.org` catalog submission is deferred while the self-hosted repository is the active channel.
+
+---
+
 ## Roadmap
 
 ### Completed Features
@@ -25,25 +52,19 @@ An offline, privacy-first Android expense tracker that records transactions from
 
 ---
 
-### In Progress: F-Droid Integration
+### Current Work: Self-Hosted F-Droid Repository
 
-The current priority is enabling distribution via F-Droid so users can install and receive seamless updates without relying on Google Play Services or sideloading prompts.
-
-#### Action Items to Complete F-Droid Integration:
-
-##### 1. Self-Hosted F-Droid Repository (GitHub Pages)
 - [x] **Configure Repository Settings**: Configured [`fdroid/config.yml`](fdroid/config.yml) with repository metadata, URL (`https://commitandquit.github.io/finance-ministry/fdroid/repo`), and 512x512 branded [`fdroid/icon.png`](fdroid/icon.png).
-- [x] **Automate GitHub Actions Workflow**: Added [`.github/workflows/fdroid-repo.yml`](.github/workflows/fdroid-repo.yml) to index releases and deploy to GitHub Pages with landing page and `fdroidrepo://` badge.
-- [ ] **Generate Persistent Keystore**: Add `FDROID_KEYSTORE_BASE64` and `FDROID_STORE_PASSWORD` in repository Actions secrets (workflow currently uses auto `fdroid init` fallback).
+- [x] **Automate GitHub Actions Workflow**: Added [`.github/workflows/fdroid-repo.yml`](.github/workflows/fdroid-repo.yml) to index signed releases and deploy to GitHub Pages with a landing page and `fdroidrepos://` badge.
+- [x] **Prepare Signed Release Pipeline**: Added a manually dispatched release workflow that signs APKs with a persistent key and publishes checksums, signing certificate, and notices.
+- [ ] **Add Persistent Signing Keys**: Add `ALPHA_KEYSTORE_BASE64`, `ALPHA_STORE_PASSWORD`, `FDROID_KEYSTORE_BASE64`, and `FDROID_STORE_PASSWORD` to repository Actions secrets. See [`docs/RELEASING.md`](docs/RELEASING.md).
 - [ ] **Enable GitHub Pages**: Set repository Pages source to **GitHub Actions** in GitHub settings.
-- [ ] **Test Client Subscription**: Verify adding `fdroidrepo://` and installing/updating the app using the official F-Droid client.
+- [ ] **Test Client Subscription**: Verify adding the `fdroidrepos://` repository and installing/updating the app with the official F-Droid client.
+- [ ] **Screenshots**: Capture and add 3-5 app screenshots under `fdroid/metadata/in.txnsense.app/en-US/images/phoneScreenshots/`.
 
-##### 2. Official F-Droid Catalog Submission (`fdroiddata`)
-- [x] **Fastlane Metadata**: Added `fastlane/metadata/android/en-US` containing app summaries, description, and icon.
-- [x] **Prepare Build Recipe**: Added [`fdroid/metadata/in.txnsense.app.yml`](fdroid/metadata/in.txnsense.app.yml) ready for upstream submission to `gitlab.com/fdroid/fdroiddata`.
-- [ ] **Screenshots**: Capture and add 3-5 app screenshots to `fastlane/metadata/android/en-US/images/phoneScreenshots/`.
-- [ ] **Local Build Verification**: Validate the build recipe using `fdroid build` inside an isolated container.
-- [ ] **Submit Upstream MR**: Open and track a Merge Request on `gitlab.com/fdroid/fdroiddata`.
+### Deferred: Official F-Droid Catalog
+
+The `fdroiddata` recipe is not being submitted yet. The app currently uses a separate signing identity for the self-hosted channel, and the same application ID must not be published to `f-droid.org` with a different key.
 
 ---
 

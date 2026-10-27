@@ -20,19 +20,5 @@ Description: |-
   * Spend & Income Tracking: Net spend per payment method, spend vs income totals, and monthly analytics.
   * Review Queue: Flags uncertain amounts or unfamiliar message layouts for manual verification.
 
-RepoType: git
-Repo: https://github.com/CommitAndQuit/finance-ministry.git
-
-Builds:
-  - versionName: 0.1.0-alpha.10
-    versionCode: 10
-    commit: v0.1.0-alpha.10
-    subdir: android-app
-    gradle:
-      - assembleRelease
-    output: app/build/outputs/apk/release/app-release-unsigned.apk
-
-AutoUpdateMode: Version
-UpdateCheckMode: Tags
-CurrentVersion: 0.1.0-alpha.10
-CurrentVersionCode: 10
+CurrentVersion: 0.2.0-alpha.1
+CurrentVersionCode: 11

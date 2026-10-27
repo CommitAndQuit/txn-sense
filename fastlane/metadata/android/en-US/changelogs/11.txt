@@ -1,0 +1,1 @@
+TxnSense now has a persistent release signing identity and a self-hosted F-Droid repository. Earlier GitHub debug APKs were signed with ephemeral CI keys, so uninstall the old debug build once before installing this release. Uninstalling deletes the local ledger. Network behavior is unchanged: the app still requests no Internet permission.

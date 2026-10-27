@@ -1,55 +1,113 @@
 # Releasing debug alphas
 
-The alpha channel distributes **debuggable** APKs from GitHub Releases. It is separate
-from a future general-use/production distribution decision. Release names are
+The alpha channel distributes signed **debuggable** APKs from GitHub Releases and
+indexes them into a self-hosted F-Droid repository. It is separate from a future
+general-use/production distribution decision. Release names are
 `vMAJOR.MINOR.PATCH-alpha.N`; the Android version name omits the leading `v`.
 
 ## One-time signing setup
 
-Official alpha APKs must keep the same signing identity so Android can update an
-installed alpha. Repository Actions secrets hold:
+Two signing identities are used:
 
-- `ALPHA_KEYSTORE_BASE64`: base64 of the dedicated PKCS12 keystore.
-- `ALPHA_STORE_PASSWORD`: the keystore and private-key password.
+- **App signing key** (`finance-alpha`): signs the APK so Android can update an
+  installed alpha. The alias is required by `android-app/app/build.gradle.kts`.
+- **Repository signing key** (`repo_key`): signs the F-Droid repository index. The
+  alias is required by `fdroid/config.yml`.
 
-Alias: `finance-alpha`. Never commit either value, the keystore, or a developer's
-default debug keystore. Keep an offline backup of the dedicated key and password;
-GitHub does not let you download an Actions secret later. Losing this signing key
-can prevent in-place updates. Restrict repository write access because trusted
-release workflow code can access these secrets.
+Both keys can live in one PKCS12 keystore as long as it contains both aliases and the
+store/key password is the same. Keep the keystore and password in a safe offline
+backup; GitHub does not let you download an Actions secret later. Never commit the
+keystore, base64 copy, or passwords; `.gitignore` excludes `*.p12`, `*.jks`, and
+`*.keystore`. Write any base64 copy outside the repository, for example under `/tmp`.
+
+Generate the keystore once:
+
+```bash
+keytool -genkeypair -storetype PKCS12 -keystore finance-alpha.p12 \
+  -alias finance-alpha -keyalg RSA -keysize 4096 -validity 10000 \
+  -dname "CN=TxnSense, O=CommitAndQuit, C=IN"
+
+keytool -genkeypair -storetype PKCS12 -keystore finance-alpha.p12 \
+  -alias repo_key -keyalg RSA -keysize 4096 -validity 10000 \
+  -dname "CN=TxnSense F-Droid Repo, O=CommitAndQuit, C=IN"
+```
+
+Base64-encode the keystore for the secret value:
+
+```bash
+base64 -w0 finance-alpha.p12 > /tmp/finance-alpha.p12.b64
+```
+
+Repository Actions secrets:
+
+- `ALPHA_KEYSTORE_BASE64`: base64 of the app-signing keystore.
+- `ALPHA_STORE_PASSWORD`: the app-signing keystore/key password.
+- `FDROID_KEYSTORE_BASE64`: base64 of the repository-signing keystore. This may be
+  the same value as `ALPHA_KEYSTORE_BASE64` if one keystore holds both aliases.
+- `FDROID_STORE_PASSWORD`: the repository-signing keystore/key password.
 
 The release workflow passes `FM_ALPHA_KEYSTORE`, `FM_ALPHA_STORE_PASSWORD` and
 `FM_REQUIRE_ALPHA_SIGNING=true` into Gradle. A normal local build uses the developer's
-standard debug signer. Official release builds fail if the persistent signer is absent.
+standard debug signer. Official alpha release builds fail if the persistent signer is
+absent. Restrict repository write access because trusted release workflow code can
+access these secrets.
 
 ## Each release
 
 1. Update `android-app/version.properties`: choose a new `versionName` and a
    `versionCode` greater than every previous downloadable APK. Never reuse an old code.
 2. Update `CHANGELOG.md`, including known issues and any upgrade restrictions.
-3. Review the source changes and stage only intended files. Run
+3. Update `fdroid/metadata/in.txnsense.app.yml` `CurrentVersion` and
+   `CurrentVersionCode` to match the new release, then add the localized
+   `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt` entry.
+4. Review the source changes and stage only intended files. Run
    `python tools/verify_public_tree.py`; no private corpus or signing files may be tracked.
-4. Run relevant JVM and emulator tests. Build and lint with
+5. Run relevant JVM and emulator tests. Build and lint with
    `./gradlew testDebugUnitTest lintDebug assembleDebug` from `android-app`.
-5. For schema changes, supply a non-destructive Room migration and test installing the
+6. For schema changes, supply a non-destructive Room migration and test installing the
    next APK over the previous official version with sample records preserved. Never
    use a destructive fallback to conceal a migration failure.
-6. Merge/push the reviewed source to `main` and wait for Android CI to pass.
-7. In **Actions → Draft alpha release → Run workflow**, select `main`. On Windows,
-   `pwsh -File tools/publish-alpha.ps1` performs the same dispatch.
-8. Review the resulting **draft pre-release** and its source commit, APK, SHA256SUMS,
-   signing certificate and notices. Add device-testing results and meaningful changes.
-9. Publish the draft while leaving **Set as a pre-release** enabled. Do not overwrite
-   an existing tag or replace a published APK; issue a new version for changes.
+7. Merge/push the reviewed source to `main`.
+8. In **Actions → Release Signed Alpha APK → Run workflow**, select `main`. The
+   workflow validates the version, creates the `v<versionName>` tag, builds and signs
+   the APK, and publishes a pre-release with the APK, SHA256SUMS, signing certificate
+   and notices.
+9. Publishing the release triggers **Deploy F-Droid Repository**, which downloads the
+   APK, signs the repository index, and deploys the GitHub Pages repository.
+10. If a release is incorrect, do not force-move the tag or replace a published APK.
+    Bump the version and publish a new release.
 
-The workflow validates version format, rejects existing tags and non-increasing
-codes, runs JVM tests/lint/build, verifies APK signing and creates a draft with all
-assets. It runs only from `main` and is manually dispatched; pull-request CI cannot
-use release secrets. Tag creation/publishing is handled by GitHub Releases.
+The release workflow runs only from `main` and is manually dispatched; pull-request
+workflows cannot access release secrets. Tags are created by GitHub Releases and never
+force-moved. Local builds use the developer debug signer and are not release artifacts.
 
-If a workflow fails, inspect its logs before retrying. If a draft/tag already exists,
-inspect that state and use a new version when necessary rather than force-moving it.
-The separate CI artifact contains reports only, not an officially signed download.
+## F-Droid repository
+
+The self-hosted repository is published at:
+
+```
+https://commitandquit.github.io/finance-ministry/fdroid/repo
+```
+
+Set the repository Pages source to **GitHub Actions**. The deploy workflow fails
+instead of generating a new repository identity when the keystore secrets are missing.
+`fdroid update` indexes the signed APK and uses `fdroid/config.yml`, which reads the
+repository password from `FDROID_STORE_PASSWORD`.
+
+The repository client link is:
+
+```
+fdroidrepos://commitandquit.github.io/finance-ministry/fdroid/repo
+```
+
+`fdroidrepo://` is the HTTP scheme; use `fdroidrepos://` for this HTTPS repository.
+The deployed landing page appends the repository key fingerprint when available.
+
+Existing releases before `0.2.0-alpha.1` used ephemeral CI signing keys. Users of
+those builds must uninstall once before installing a release signed with the new
+persistent key. Document this in the release notes; uninstalling deletes the local
+ledger. Do not later publish the same application ID to the official
+`f-droid.org` catalog with a different signing key.
 
 ## Emulator verification
 
@@ -98,9 +156,9 @@ the process to exercise cold database reopening. This is not proof that Android 
 deliver SMS to a force-stopped app; force-stop and ordinary background process death
 have different platform semantics.
 
-For alpha.2, this protocol passed over the published alpha.1 APK on an isolated
-Android 16 emulator, including cold process reopening. Physical-phone upgrades and
-OEM-specific receiver behavior still need validation.
+In the previous `0.1.0-alpha` line, this protocol passed over the preceding
+published APK on an isolated Android 16 emulator, including cold process reopening.
+Physical-phone upgrades and OEM-specific receiver behavior still need validation.
 
 ### Repository concurrency checks
 

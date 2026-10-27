@@ -4,6 +4,10 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to deploy (defaults to the latest release)'
+        required: false
 
 permissions:
   contents: read
@@ -11,76 +15,101 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: false
 
 jobs:
   build-repo:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install fdroidserver & tools
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android build tools
+        run: sdkmanager 'build-tools;36.0.0'
+
+      - name: Install fdroidserver
         run: |
           sudo apt-get update
-          sudo apt-get install -y fdroidserver apksigner
+          sudo apt-get install -y fdroidserver
 
-      - name: Prepare F-Droid repository structure
-        run: |
-          mkdir -p fdroid/repo
-
-      - name: Fetch Release APKs
+      - name: Fetch release APK
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          echo "Attempting to download release APKs from GitHub releases..."
-          if gh release download --pattern "*.apk" --dir fdroid/repo 2>/dev/null; then
-            echo "Downloaded APKs:"
-            ls -la fdroid/repo/
-          else
-            echo "No published release APK found. Checking for workflow artifacts or build..."
+          set -euo pipefail
+          tag="${INPUT_TAG:-$RELEASE_TAG}"
+          if [ -z "$tag" ]; then
+            tag=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
           fi
+          test -n "$tag"
+          echo "Downloading APK from release $tag"
+          mkdir -p fdroid/repo
+          gh release download "$tag" --pattern "*.apk" --dir fdroid/repo
+          apk=$(find fdroid/repo -maxdepth 1 -name '*.apk' | head -1)
+          test -n "$apk"
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$sdk"
+          "$sdk/build-tools/36.0.0/aapt" dump badging "$apk" | grep -q "package: name='in.txnsense.app'"
+          echo "Downloaded $(basename "$apk")"
 
-      - name: Configure Repository Keystore
-        working-directory: fdroid
+      - name: Configure repository keystore and icon
         env:
           KEYSTORE_BASE64: ${{ secrets.FDROID_KEYSTORE_BASE64 }}
           STORE_PASS: ${{ secrets.FDROID_STORE_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "Restoring persistent repository keystore from FDROID_KEYSTORE_BASE64..."
-            echo "$KEYSTORE_BASE64" | base64 -d > keystore.p12
-          else
-            echo "::warning::FDROID_KEYSTORE_BASE64 secret not found. Running fdroid init for temporary keystore..."
-            fdroid init --no-prompt || true
+          set -euo pipefail
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$STORE_PASS" ]; then
+            echo "::error::FDROID_KEYSTORE_BASE64 and FDROID_STORE_PASSWORD must be configured."
+            exit 1
           fi
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > fdroid/keystore.p12
+          mkdir -p fdroid/repo/icons
+          cp fdroid/icon.png fdroid/repo/icons/icon.png
 
-      - name: Generate F-Droid Repository Index
+      - name: Generate repository index
         working-directory: fdroid
         env:
-          FDROID_KEY_STORE_PASS: ${{ secrets.FDROID_STORE_PASSWORD }}
+          FDROID_STORE_PASSWORD: ${{ secrets.FDROID_STORE_PASSWORD }}
         run: |
-          # If APKs exist, index them; otherwise create empty repo index
-          if [ -n "$(ls -A repo/*.apk 2>/dev/null)" ]; then
-            fdroid update --create-metadata --pretty
-          else
-            echo "No APKs in repo directory yet. Creating minimal repository index..."
-            fdroid update --pretty || true
-          fi
+          set -euo pipefail
+          fdroid update --pretty
           ls -la repo/
 
-      - name: Stage Pages Artifact
+      - name: Stage Pages artifact
+        env:
+          FDROID_STORE_PASSWORD: ${{ secrets.FDROID_STORE_PASSWORD }}
         run: |
+          set -euo pipefail
           mkdir -p pages/fdroid
-          # Copy fdroid/repo into pages/fdroid/repo so the URL matches https://commitandquit.github.io/finance-ministry/fdroid/repo
           cp -r fdroid/repo pages/fdroid/
-          cp fdroid/icon.png pages/fdroid/ || true
-          
-          # Create user-friendly landing page
-          cat << 'EOF' > pages/index.html
+
+          fingerprint=$(keytool -list -v -keystore fdroid/keystore.p12 -alias repo_key \
+            -storepass:env FDROID_STORE_PASSWORD 2>/dev/null \
+            | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')
+          query=""
+          if [ -n "$fingerprint" ]; then
+            query="?fingerprint=$fingerprint"
+          fi
+
+          cat << EOF > pages/index.html
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -99,8 +128,8 @@ jobs:
           <body>
             <h1>TxnSense F-Droid Repository</h1>
             <p>This is the official self-hosted F-Droid repository for <strong>TxnSense</strong>, an offline, privacy-first Android expense tracker.</p>
-            
-            <a class="btn" href="fdroidrepo://commitandquit.github.io/finance-ministry/fdroid/repo">Add to F-Droid</a>
+
+            <a class="btn" href="fdroidrepos://commitandquit.github.io/finance-ministry/fdroid/repo${query}">Add to F-Droid</a>
 
             <div class="box">
               <h3>Manual Setup</h3>
@@ -112,6 +141,7 @@ jobs:
                 </li>
                 <li>Verify and accept the repository key fingerprint.</li>
               </ol>
+              <p><strong>Repository fingerprint:</strong> <code>${fingerprint:-see the F-Droid client prompt}</code></p>
             </div>
 
             <p><a href="https://github.com/CommitAndQuit/finance-ministry">View TxnSense on GitHub</a></p>
@@ -119,7 +149,10 @@ jobs:
           </html>
           EOF
 
-      - name: Upload Pages Artifact
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: pages
