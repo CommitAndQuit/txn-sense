@@ -4,6 +4,11 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.2.0-alpha.7
+
+- Removed uneccessary tests
+- Update test files: cleaned up obsolete tests, added PushSmsFromFileTest, updated UI test expectations.]
+
 ## 0.2.0-alpha.6
 
 - fix(ui): resolve clickability and touch target disconnect in scrollable transaction lists
