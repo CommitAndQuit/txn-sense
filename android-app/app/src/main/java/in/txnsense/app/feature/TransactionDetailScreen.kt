@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,7 +54,7 @@ fun TransactionDetailScreen(
     var deleteDialog by remember { mutableStateOf(false) }
 
     Box(
-        Modifier.fillMaxSize()
+        Modifier.fillMaxSize().testTag("transaction_detail")
             .background(Brush.verticalGradient(listOf(brand.bgTop, brand.bgBottom)))
     ) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {

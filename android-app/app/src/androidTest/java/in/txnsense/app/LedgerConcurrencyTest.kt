@@ -24,14 +24,14 @@ class LedgerConcurrencyTest {
             .grantRuntimePermission(context.packageName, Manifest.permission.RECEIVE_SMS)
         check(repository.preferences.edit().putBoolean("sms_disclosure", true).commit())
     }
-    private fun input(amount: String) = ManualInput(amount, Direction.Debit, 1788600000000L, TransactionType.Other)
+    private fun input(amount: String) = ManualInput(amount, Direction.Debit, System.currentTimeMillis(), TransactionType.Other)
 
     // Catches duplicate insertion/notification and automation overwriting a concurrent correction.
     @Test fun duplicate_capture_race_preserves_manual_correction() = runBlocking {
         val repository = TransactionRepository(context, namespace())
         try {
             enable(repository)
-            val sms = IncomingSms("SYNTHETIC", 1788600000000L, "INR 42 debited via UPI")
+            val sms = IncomingSms("SYNTHETIC", System.currentTimeMillis(), "INR 42 debited via UPI")
             val notifications = AtomicInteger()
             val start = CompletableDeferred<Unit>()
             val attempts = List(24) { async(Dispatchers.Default) {

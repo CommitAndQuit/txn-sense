@@ -86,6 +86,9 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var showFilters by remember { mutableStateOf(false) }
     var showSourcePicker by remember { mutableStateOf(false) }
     var reviewWarning by remember { mutableStateOf(false) }
+    // Remembered only while this ledger composition is alive, so a review deep link keeps the
+    // detailed list open when the user switches from the review queue to the full history.
+    var handledReviewGeneration by remember { mutableIntStateOf(0) }
     var draftPurposeFilter by remember { mutableStateOf("All") }
     var draftOriginFilter by remember { mutableStateOf("All") }
     var draftDirectionFilter by remember { mutableStateOf("All") }
@@ -136,6 +139,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
             else {
                 settings = false; settingsSection = null; selected = null; selectedId = null; form = false
                 filter = "Review"; sourceKindFilter = "All"; offset = 0; snapshot = null
+                handledReviewGeneration = reviewRequestGeneration
             }
         }
     }
@@ -154,8 +158,10 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
         }
     }
     // When launched as an overlay from the Spend Tracker home, never render the old ledger home:
-    // pop back once nothing else is showing, and stay blank while a tapped transaction loads.
-    val hasContent = settings || form || quickForm || selectedId != null || selected != null || filter == "Review"
+    // pop back once nothing else is showing, and stay blank while a deep link is still being applied.
+    val hasContent = settings || form || quickForm || selectedId != null || selected != null || filter == "Review" ||
+        request != null || quickRequest || reviewRequestGeneration > handledReviewGeneration ||
+        handledReviewGeneration > 0
     if (onExitHome != null && !hasContent) {
         if (request == null) LaunchedEffect("exit-home") { onExitHome() }
         Surface(Modifier.fillMaxSize()) {}
@@ -399,13 +405,14 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
         title = { Text("Open another transaction?") }, text = { Text("Your current changes have not been saved.") },
         confirmButton = { TextButton(onClick = { approvedRequest = request; requestWarning = false; requestApproval++ }) { Text("Discard and open") } },
         dismissButton = { TextButton(onClick = { requestWarning = false; consumeRequest() }) { Text("Keep editing") } })
-    if (reviewWarning) AlertDialog(onDismissRequest = { reviewWarning = false },
+    if (reviewWarning) AlertDialog(onDismissRequest = { reviewWarning = false; handledReviewGeneration = reviewRequestGeneration },
         title = { Text("Open review queue?") }, text = { Text("Your current transaction changes have not been saved.") },
         confirmButton = { TextButton(onClick = {
             reviewWarning = false; dirtyForm = false; form = false; selected = null; selectedId = null
             settings = false; settingsSection = null; filter = "Review"; offset = 0; snapshot = null
+            handledReviewGeneration = reviewRequestGeneration
         }) { Text("Discard and review") } },
-        dismissButton = { TextButton(onClick = { reviewWarning = false }) { Text("Keep editing") } })
+        dismissButton = { TextButton(onClick = { reviewWarning = false; handledReviewGeneration = reviewRequestGeneration }) { Text("Keep editing") } })
     if (disclosure) AlertDialog(onDismissRequest = { disclosure = false }, title = { Text("Read new SMS on this device?") },
         text = { Text("Android gives this app access to incoming SMS, including non-financial messages. Processing stays on this device. We reject OTPs and non-transactions and store normalized financial fields in encrypted storage. Raw messages and senders are not stored or uploaded. SMS permission is optional; manual entry always works. No payment or bank connection is involved.") },
         confirmButton = { TextButton(onClick = { repository.preferences.edit().putBoolean("sms_disclosure", true).apply(); disclosure = false; smsPermission.launch(Manifest.permission.RECEIVE_SMS) }) { Text("I understand — continue") } },

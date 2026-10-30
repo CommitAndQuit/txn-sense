@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -186,7 +185,6 @@ fun TransactionEditPanel(
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {

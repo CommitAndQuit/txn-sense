@@ -44,12 +44,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             TxnSenseTheme {
                 val repository = (application as TxnSenseApp).container.repository
-                var showLedger by remember { mutableStateOf(false) }
-                var openSettings by remember { mutableStateOf(false) }
+                var showLedger by rememberSaveable { mutableStateOf(false) }
+                var openSettings by rememberSaveable { mutableStateOf(false) }
                 // Payment-method detail page (one instrument), reached by tapping a home card.
                 var methodDetail by remember { mutableStateOf<MethodRef?>(null) }
                 // Styled transaction detail page (transaction id), reached by tapping a transaction row.
-                var detailTxn by remember { mutableStateOf<String?>(null) }
+                var detailTxn by rememberSaveable { mutableStateOf<String?>(null) }
                 // Home UI state hoisted above AnimatedContent so it survives navigating into the
                 // detail page and back: the carousel scroll position, the selected month, and the
                 // loaded overview (so the home never flashes empty on return, which reset the scroll).

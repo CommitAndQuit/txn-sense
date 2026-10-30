@@ -53,14 +53,14 @@ class NotificationNavigationUiTest {
                     .filterIsInstance<MainActivity>().single().recreate()
             }
             rule.waitForIdle()
-            rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
+            rule.onNodeWithText("Your spending by payment method").assertIsDisplayed()
             view.send()
             rule.waitUntil(15000) { rule.onAllNodesWithText("₹700.02").fetchSemanticsNodes().isNotEmpty() }
-            rule.onNodeWithText("Edit / confirm").assertIsDisplayed()
+            rule.onNodeWithText("Edit all details").assertIsDisplayed()
             runBlocking { repository.delete(second) }
             view.send()
-            rule.waitUntil(15000) { rule.onAllNodesWithText("This transaction no longer exists.").fetchSemanticsNodes().isNotEmpty() }
-            rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
+            rule.waitUntil(15000) { rule.onAllNodesWithText("Your spending by payment method").fetchSemanticsNodes().isNotEmpty() }
+            rule.onNodeWithText("₹700.02").assertDoesNotExist()
         } finally {
             runBlocking { repository.delete(first); repository.delete(second) }
             // PendingIntent delivery can create another activity task. Finish test-owned

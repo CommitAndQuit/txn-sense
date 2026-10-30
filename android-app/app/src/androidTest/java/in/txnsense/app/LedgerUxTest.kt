@@ -3,6 +3,7 @@ package `in`.txnsense.app
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.semantics.SemanticsActions
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import kotlinx.coroutines.runBlocking
@@ -12,7 +13,15 @@ import org.junit.Assert.assertTrue
 class LedgerUxTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
 
+    private val repository
+        get() = (rule.activity.application as TxnSenseApp).container.repository
+
+    @Before fun skipFirstUseGuide() {
+        repository.preferences.edit().putBoolean("onboarding_complete", true).commit()
+    }
+
     @Test fun monthly_cash_flow_is_visible_and_totals_help_opens_from_info_icon() {
+        rule.openLedger()
         rule.waitUntil(15000) { rule.onAllNodesWithText("Money out · month").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithText("Money out · month").assertIsDisplayed()
         rule.onNodeWithText("Money in · month").assertIsDisplayed()
@@ -24,8 +33,8 @@ class LedgerUxTest {
     }
 
     @Test fun settings_are_separate_and_return_to_home() {
+        rule.openSettings()
         rule.onNodeWithText("Erase all local data").assertDoesNotExist()
-        rule.onNodeWithText("Settings").performClick()
         rule.onNodeWithText("SMS and past messages").performClick()
         rule.onNodeWithText("Recording notifications").assertExists()
         rule.onNodeWithText("Back").performClick()
@@ -33,10 +42,11 @@ class LedgerUxTest {
         rule.onNodeWithText("Erase all local data").performScrollTo().assertExists()
         rule.onNodeWithText("Back").performClick()
         rule.onNodeWithText("Home").performClick()
-        rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
+        rule.onNodeWithText("Your spending by payment method").assertIsDisplayed()
     }
 
     @Test fun repeating_active_filter_does_not_remove_saved_history() {
+        rule.openLedger()
         val repository = (rule.activity.application as TxnSenseApp).container.repository
         val id = runBlocking { repository.save(`in`.txnsense.app.data.ManualInput("71.23", `in`.txnsense.app.core.model.Direction.Debit, System.currentTimeMillis(), `in`.txnsense.app.core.model.TransactionType.Other)) }
         try {
@@ -56,6 +66,7 @@ class LedgerUxTest {
     }
 
     @Test fun money_flow_filters_show_only_the_selected_direction() {
+        rule.openLedger()
         val repository = (rule.activity.application as TxnSenseApp).container.repository
         val debitLabel = "Debit filter herb"; val creditLabel = "Credit filter comet"
         val debit = runBlocking { repository.save(`in`.txnsense.app.data.ManualInput("31.11", `in`.txnsense.app.core.model.Direction.Debit, System.currentTimeMillis(), `in`.txnsense.app.core.model.TransactionType.Other, label = debitLabel)) }
@@ -77,6 +88,7 @@ class LedgerUxTest {
     }
 
     @Test fun cancel_changed_form_keeps_draft_until_discard_confirmed() {
+        rule.openLedger()
         rule.onNodeWithText("+ Add transaction").performClick()
         rule.onNodeWithText("Amount (INR)").performTextInput("42.00")
         rule.onNodeWithText("Cancel").performClick()
@@ -88,6 +100,7 @@ class LedgerUxTest {
     }
 
     @Test fun review_reminder_navigation_does_not_discard_a_dirty_form() {
+        rule.openLedger()
         rule.onNodeWithText("+ Add transaction").performClick()
         rule.onNodeWithText("Amount (INR)").performTextInput("43.21")
         rule.activityRule.scenario.onActivity { it.requestReview() }
@@ -97,6 +110,7 @@ class LedgerUxTest {
     }
 
     @Test fun money_in_choice_saves_credit_and_draft_survives_recreation() {
+        rule.openLedger()
         val repository = (rule.activity.application as TxnSenseApp).container.repository
         val before = runBlocking { repository.snapshot().rows.map { it.id }.toSet() }
         try {
@@ -115,6 +129,7 @@ class LedgerUxTest {
     }
 
     @Test fun incomplete_sms_can_be_reviewed_without_reentering_known_direction() {
+        rule.openLedger()
         val app = rule.activity.application as TxnSenseApp
         val repository = app.container.repository
         val consent = repository.preferences.getBoolean("sms_disclosure", false)
@@ -122,7 +137,7 @@ class LedgerUxTest {
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(app.packageName, android.Manifest.permission.RECEIVE_SMS)
         try {
             repository.preferences.edit().putBoolean("sms_disclosure", true).commit()
-            assertTrue(runBlocking { repository.ingest(`in`.txnsense.app.core.model.IncomingSms("SYNTHETIC", System.currentTimeMillis(), "Your account was debited via UPI.")) })
+            assertTrue(runBlocking { repository.ingest(`in`.txnsense.app.core.model.IncomingSms("SYNTHETIC", System.currentTimeMillis(), "INR 1.234 debited via UPI.")) })
             rule.waitForIdle()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Open review queue"))
             rule.onNodeWithContentDescription("Open review queue").performClick()
@@ -134,12 +149,13 @@ class LedgerUxTest {
             }
             rule.onNode(target).performClick()
             rule.onNodeWithText("Check this transaction").assertExists()
-            rule.onNodeWithText("Edit / confirm").performClick()
+            rule.onNodeWithText("Edit all details").performScrollTo().performClick()
+            rule.onNodeWithText("Edit all details").performScrollTo().performClick()
             rule.onNodeWithText("Money out").assertIsSelected()
             rule.onNodeWithText("Amount (INR)").performTextInput("81.25")
             rule.onNodeWithText("Transaction type — please choose: Not identified").performScrollTo().performClick()
             rule.onNodeWithText("Other").performClick()
-            rule.onNodeWithText("Save transaction").performSemanticsAction(SemanticsActions.OnClick)
+            rule.onNodeWithText("Save").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
             rule.waitForIdle()
             try {
                 rule.waitUntil(15000) { runBlocking { repository.snapshot().rows.any { it.id !in before && it.amountMinor == 8125L && it.reviewState == "Confirmed" } } }
@@ -154,6 +170,7 @@ class LedgerUxTest {
     }
 
     @Test fun category_only_form_edit_preserves_exact_timestamp_and_reversal_link() {
+        rule.openLedger()
         val app = rule.activity.application as TxnSenseApp
         val repository = app.container.repository
         val consent = repository.preferences.getBoolean("sms_disclosure", false)
@@ -178,12 +195,12 @@ class LedgerUxTest {
             val linkedCards = hasText("₹42.00") and hasText("Money out")
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(linkedCards)
             rule.onAllNodes(linkedCards)[1].performClick()
-            rule.onNodeWithText("Edit / confirm").performClick()
+            rule.onNodeWithText("Edit all details").performClick()
             rule.onNodeWithText("Category: Other").performScrollTo().performClick()
             rule.onNodeWithText("Food").performClick()
             rule.onNodeWithText("Transaction type — please choose: Not identified").performScrollTo().performClick()
             rule.onNodeWithText("Other").performClick()
-            rule.onNodeWithText("Save transaction").performSemanticsAction(SemanticsActions.OnClick)
+            rule.onNodeWithText("Save").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
             try {
                 rule.waitUntil(15_000) { rule.onAllNodesWithText("+ Add transaction").fetchSemanticsNodes().isNotEmpty() }
             } catch (failure: Throwable) {
@@ -201,6 +218,7 @@ class LedgerUxTest {
     }
 
     @Test fun focused_source_picker_does_not_confirm_a_review_transaction() {
+        rule.openLedger()
         val app = rule.activity.application as TxnSenseApp
         val repository = app.container.repository
         val consent = repository.preferences.getBoolean("sms_disclosure", false)
@@ -226,7 +244,7 @@ class LedgerUxTest {
             rule.waitUntil(10_000) { runBlocking { repository.get(transactionId!!)!!.paymentSourceId } == sourceId }
             assertEquals("NeedsReview", runBlocking { repository.get(transactionId!!)!!.reviewState })
             rule.onNodeWithText("Check this transaction").assertExists()
-            rule.onNodeWithText("Edit / confirm").assertExists()
+            rule.onNodeWithText("Edit all details").assertExists()
         } finally {
             repository.preferences.edit().putBoolean("sms_disclosure", consent).commit()
             transactionId?.let { runBlocking { repository.delete(it) } }

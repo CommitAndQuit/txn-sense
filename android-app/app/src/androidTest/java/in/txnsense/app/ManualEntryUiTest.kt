@@ -5,11 +5,19 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.semantics.SemanticsActions
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
 class ManualEntryUiTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
+
+    private val repository
+        get() = (rule.activity.application as TxnSenseApp).container.repository
+
+    @Before fun skipFirstUseGuide() {
+        repository.preferences.edit().putBoolean("onboarding_complete", true).commit()
+    }
 
     @Test fun resume_refreshes_capture_status_without_disabling_manual_entry() {
         val repository = (rule.activity.application as TxnSenseApp).container.repository
@@ -18,16 +26,19 @@ class ManualEntryUiTest {
             repository.preferences.edit().putBoolean("sms_disclosure", false).commit()
             rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
             rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
-            rule.onNodeWithText("Settings").performClick()
+            rule.openSettings()
             rule.onNodeWithText("SMS and past messages").performClick()
             rule.onNodeWithText("Enable SMS capture").assertExists()
             rule.onNodeWithText("Back").performClick()
             rule.onNodeWithText("Home").performClick()
+            rule.onNodeWithText("Your spending by payment method").assertIsDisplayed()
+            rule.openLedger()
             rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
         } finally { repository.preferences.edit().putBoolean("sms_disclosure", previous).commit() }
     }
 
     @Test fun add_manual_transaction_through_real_form() {
+        rule.openLedger()
         val repository = (rule.activity.application as TxnSenseApp).container.repository
         val before = runBlocking { repository.snapshot().rows.map { it.id }.toSet() }
         try {
@@ -41,7 +52,7 @@ class ManualEntryUiTest {
             }
             rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("₹512.34"))
-            rule.onNodeWithText("₹512.34").assertIsDisplayed()
+            rule.onNode(hasText("₹512.34") and hasClickAction()).assertIsDisplayed()
             val saved = runBlocking { repository.snapshot().rows.single { it.id !in before && it.amountMinor == 51234L } }
             assertEquals("Debit", saved.direction)
         } finally {

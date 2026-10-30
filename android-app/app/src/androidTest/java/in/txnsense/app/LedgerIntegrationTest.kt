@@ -150,7 +150,7 @@ class LedgerIntegrationTest {
                         for (i in 0 until entities.length()) {
                             val entity = entities.getJSONObject(i)
                             db.execSQL(entity.getString("createSql").replace("\${TABLE_NAME}", entity.getString("tableName")))
-                            val indices = entity.getJSONArray("indices")
+                            val indices = entity.optJSONArray("indices") ?: org.json.JSONArray()
                             for (j in 0 until indices.length()) db.execSQL(indices.getJSONObject(j).getString("createSql")
                                 .replace("\${TABLE_NAME}", entity.getString("tableName")))
                         }
@@ -451,11 +451,17 @@ class LedgerIntegrationTest {
             })
             assertNotNull(notified); assertFalse(repository.ingest(sms))
             assertEquals(1, repository.snapshot().rows.size)
-            val notifications = context.getSystemService(NotificationManager::class.java).activeNotifications
+            val notificationManager = context.getSystemService(NotificationManager::class.java)
+            var notifications = notificationManager.activeNotifications
+            val deadline = System.currentTimeMillis() + 5_000
+            while (notifications.none { it.tag == notified } && System.currentTimeMillis() < deadline) {
+                kotlinx.coroutines.delay(25)
+                notifications = notificationManager.activeNotifications
+            }
             assertTrue(notifications.any { it.tag == notified })
-            context.getSystemService(NotificationManager::class.java).cancel(notified, 1)
+            notificationManager.cancel(notified, 1)
             assertFalse(repository.ingest(IncomingSms("SYNTHETIC", now + 1, "OTP 123456 for INR 250 payment")))
-            assertTrue(repository.ingest(IncomingSms("SYNTHETIC", now + 2, "Your account debited by 250")))
+            assertTrue(repository.ingest(IncomingSms("SYNTHETIC", now + 2, "INR 1.234 debited via UPI.")))
             assertEquals("NeedsReview", repository.snapshot().rows.first().reviewState)
             val secrets = DeviceSecrets(context, name)
             assertArrayEquals(secrets.hmacSource("a", 1, "bc"), secrets.hmacSource("a", 1, "bc"))
@@ -489,7 +495,7 @@ class LedgerIntegrationTest {
                         for (i in 0 until entities.length()) {
                             val entity = entities.getJSONObject(i)
                             db.execSQL(entity.getString("createSql").replace("\${TABLE_NAME}", entity.getString("tableName")))
-                            val indices = entity.getJSONArray("indices")
+                            val indices = entity.optJSONArray("indices") ?: org.json.JSONArray()
                             for (j in 0 until indices.length()) db.execSQL(indices.getJSONObject(j).getString("createSql")
                                 .replace("\${TABLE_NAME}", entity.getString("tableName")))
                         }
@@ -502,8 +508,8 @@ class LedgerIntegrationTest {
             try {
                 val old = helper.writableDatabase
                 val now = System.currentTimeMillis()
-                old.execSQL("INSERT INTO transactions (id, sourceType, sourceTimestamp, effectiveTimestamp, amountMinor, currency, direction, status, channel, transactionType, confidence, reviewState, parserVersion, isUserCorrected, createdAt, updatedAt) VALUES ('expense', 'Manual', $now, $now, 4200, 'INR', 'Debit', 'Successful', 'CashManual', 'Other', 0, 'Confirmed', 0, 1, $now, $now)")
-                old.execSQL("INSERT INTO transactions (id, sourceType, sourceTimestamp, effectiveTimestamp, amountMinor, currency, direction, status, channel, transactionType, confidence, reviewState, parserVersion, isUserCorrected, createdAt, updatedAt) VALUES ('transfer', 'Manual', $now, $now, 5100, 'INR', 'Transfer', 'Successful', 'CashManual', 'SelfTransfer', 0, 'Confirmed', 0, 1, $now, $now)")
+                old.execSQL("INSERT INTO transactions (id, sourceType, sourceTimestamp, effectiveTimestamp, amountMinor, currency, direction, status, channel, transactionType, confidence, reviewState, parserVersion, isUserCorrected, createdAt, updatedAt, category, ownership, repaidMinor) VALUES ('expense', 'Manual', $now, $now, 4200, 'INR', 'Debit', 'Successful', 'CashManual', 'Other', 0, 'Confirmed', 0, 1, $now, $now, 'Other', 'Personal', 0)")
+                old.execSQL("INSERT INTO transactions (id, sourceType, sourceTimestamp, effectiveTimestamp, amountMinor, currency, direction, status, channel, transactionType, confidence, reviewState, parserVersion, isUserCorrected, createdAt, updatedAt, category, ownership, repaidMinor) VALUES ('transfer', 'Manual', $now, $now, 5100, 'INR', 'Transfer', 'Successful', 'CashManual', 'SelfTransfer', 0, 'Confirmed', 0, 1, $now, $now, 'Other', 'SelfTransfer', 0)")
             } finally { helper.close(); password.fill(0) }
             assertEquals("Expense", repository.get("expense")!!.spendType)
             assertEquals("TransferToSelf", repository.get("transfer")!!.spendType)
