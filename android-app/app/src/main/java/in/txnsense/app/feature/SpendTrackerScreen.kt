@@ -367,6 +367,10 @@ private fun MonthTotalCard(repository: TransactionRepository, ym: YearMonth, onO
     LaunchedEffect(ym, revision) { total = runCatching { repository.monthSpendTotal(ym.atDay(1)) }.getOrNull() }
     // Read the locale from the configuration so the label recomposes on a locale change.
     val label = "${ym.month.getDisplayName(TextStyle.FULL, LocalConfiguration.current.locales[0])} ${ym.year}"
+    val budget = repository.preferences.getLong("monthly_budget", 0L)
+    val actualSpend = total ?: 0L
+    val targetBudget = if (budget > 0) budget else null
+    val remainingAmount = targetBudget?.let { it - actualSpend }
     val glassShape = RoundedCornerShape(24.dp)
     Column(
         Modifier.fillMaxWidth().clip(glassShape)
@@ -378,8 +382,23 @@ private fun MonthTotalCard(repository: TransactionRepository, ym: YearMonth, onO
     ) {
         Text("Total Spends", fontSize = 14.sp, color = brand.textSecondary)
         Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = scheme.onSurface)
-        Text(money(total ?: 0L), fontSize = 40.sp, fontWeight = FontWeight.Bold,
+        Text(money(actualSpend), fontSize = 40.sp, fontWeight = FontWeight.Bold,
             color = scheme.onSurface, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        if (targetBudget != null && remainingAmount != null) {
+            val isOverBudget = remainingAmount < 0
+            val color = if (isOverBudget) scheme.error else scheme.onSurface
+            Text(
+                if (isOverBudget) "Crossed budget by ${money(-remainingAmount)}" else "${money(remainingAmount)} remaining",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+            Text(
+                "Target: ${money(targetBudget)}",
+                fontSize = 12.sp,
+                color = brand.textSecondary
+            )
+        }
     }
 }
 

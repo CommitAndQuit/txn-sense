@@ -227,12 +227,43 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 when (settingsSection) {
                     null -> {
                         Text("Private and encrypted on this device", style = MaterialTheme.typography.bodyMedium)
+                        val budget = repository.preferences.getLong("monthly_budget", 0L)
+                        SettingsRow("Monthly budget", if (budget > 0) "Target: ${money(budget)}" else "Set target spend for the month") { settingsSection = "Monthly budget" }
                         SettingsRow("SMS and past messages", if (captureEnabled) "New SMS capture is on" else "Capture is off · Manual entry still works") { settingsSection = "SMS & messages" }
                         SettingsRow("Payment sources", if (paymentSources.count { it.active } == 0) "Add your UPI, accounts and cards" else "${paymentSources.count { it.active }} active") { settingsSection = "Payment sources" }
                         SettingsRow("Review reminders", if (repository.preferences.getBoolean("review_reminder", false)) "Daily reminder is on" else "Off") { settingsSection = "Review reminders" }
                         SettingsRow("New message formats", if (repository.learningEnabled()) "Learning from unreadable alerts" else "Off") { settingsSection = "New message formats" }
                         SettingsRow("Data and privacy", "Local storage, erasure and recovery") { settingsSection = "Data & privacy" }
                         SettingsRow("Getting started", "Review the setup checklist") { showGuide = true; settings = false; settingsSection = null }
+                    }
+                    "Monthly budget" -> {
+                        val budget = repository.preferences.getLong("monthly_budget", 0L)
+                        var budgetText by remember { mutableStateOf(if (budget > 0) (budget / 100).toString() else "") }
+                        Text("Set your target budget for the month (in ₹).")
+                        OutlinedTextField(
+                            value = budgetText,
+                            onValueChange = { if (it.all { char -> char.isDigit() }) budgetText = it },
+                            label = { Text("Monthly budget (₹)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    val newBudget = budgetText.toLongOrNull()?.let { it * 100 } ?: 0L
+                                    repository.preferences.edit().putLong("monthly_budget", newBudget).apply()
+                                    repository.revision.value++
+                                    settingsSection = null
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Save budget") }
+                            if (budget > 0) {
+                                OutlinedButton(onClick = {
+                                    repository.preferences.edit().remove("monthly_budget").apply()
+                                    repository.revision.value++
+                                    settingsSection = null
+                                }) { Text("Clear") }
+                            }
+                        }
                     }
                     "SMS & messages" -> {
                         Text("Record supported bank alerts as transactions. You can always add or correct a transaction yourself.")
