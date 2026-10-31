@@ -24,12 +24,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import java.time.YearMonth
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import `in`.txnsense.app.feature.MonthDetailScreen
 
 class MainActivity : ComponentActivity() {
     private val request = mutableStateOf<Pair<String, Boolean>?>(null)
@@ -46,6 +48,7 @@ class MainActivity : ComponentActivity() {
                 val repository = (application as TxnSenseApp).container.repository
                 var showLedger by rememberSaveable { mutableStateOf(false) }
                 var openSettings by rememberSaveable { mutableStateOf(false) }
+var monthDetail by remember { mutableStateOf<YearMonth?>(null) }
                 // Payment-method detail page (one instrument), reached by tapping a home card.
                 var methodDetail by remember { mutableStateOf<MethodRef?>(null) }
                 // Styled transaction detail page (transaction id), reached by tapping a transaction row.
@@ -108,7 +111,11 @@ class MainActivity : ComponentActivity() {
                                         onBack = { detailTxn = null },
                                         onOpenTransaction = { detailTxn = it })
                                 }
-                                ScreenState.Home -> {
+                                is ScreenState.MonthDetail -> {
+    MonthDetailScreen(repository, s.month, onBack = { monthDetail = null },
+        sharedScope = this@SharedTransitionLayout, animatedScope = this@AnimatedContent)
+}
+ScreenState.Home -> {
                                     `in`.txnsense.app.feature.SpendTrackerScreen(repository,
                                         month = homeMonth, overview = homeOverview, onMonthChange = { homeMonth = it },
                                         timeFilter = homeTimeFilter, onTimeFilter = { homeTimeFilter = it },
@@ -116,7 +123,7 @@ class MainActivity : ComponentActivity() {
                                         onOpenSettings = { openSettings = true; showLedger = true },
                                         onOpenMethod = { channel, bank, last4, month -> methodDetail = MethodRef(channel, bank, last4, month) },
                                         sharedScope = this@SharedTransitionLayout, animatedScope = this@AnimatedContent,
-                                        carouselState = carouselState)
+                                        carouselState = carouselState, onOpenMonth = { ym -> monthDetail = ym })
                                 }
                             }
                         }
@@ -147,6 +154,7 @@ private sealed interface ScreenState {
     data object Ledger : ScreenState
     data class Method(val ref: MethodRef) : ScreenState
     data class Detail(val id: String) : ScreenState
+    data class MonthDetail(val month: YearMonth) : ScreenState
 }
 
 @Composable

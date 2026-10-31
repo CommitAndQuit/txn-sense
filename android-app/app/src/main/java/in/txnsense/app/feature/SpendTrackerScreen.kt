@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -120,9 +121,10 @@ fun SpendTrackerScreen(
     sharedScope: SharedTransitionScope? = null,
     animatedScope: AnimatedVisibilityScope? = null,
     carouselState: androidx.compose.foundation.lazy.LazyListState? = null,
-    historicalSmsSource: HistoricalSmsSource? = null,
+    historicalSmsSource: HistoricalSmsSource? = null, onOpenMonth: (YearMonth) -> Unit = {},
 ) {
     val brand = LocalBrand.current
+    val scheme = MaterialTheme.colorScheme
     val context = LocalContext.current
     val source = historicalSmsSource ?: remember(context) { AndroidHistoricalSmsSource(context) }
     val scope = rememberCoroutineScope()
@@ -159,21 +161,66 @@ fun SpendTrackerScreen(
         if (!refreshing) startRefresh()
     }
 
+    val zone = remember { ZoneId.systemDefault() }
+    val today = remember { LocalDate.now() }
+    val rows = remember(overview?.recentSpends, timeFilter) {
+        overview?.recentSpends.orEmpty().filter { row ->
+            val date = Instant.ofEpochMilli(row.effectiveTimestamp).atZone(zone).toLocalDate()
+            when (timeFilter) {
+                "Today" -> date == today
+                "This Week" -> !date.isBefore(today.minusDays(6))
+                else -> true
+            }
+        }
+    }
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val minFooterHeight = remember(rows.size, screenHeight) {
+        (screenHeight - (rows.size * 68 + 60).dp).coerceAtLeast(0.dp)
+    }
+
     // Fixed full-screen gradient (light green bottom -> lighter top); the list scrolls over it.
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(brand.bgTop, brand.bgBottom)))) {
         PullToRefreshBox(isRefreshing = refreshing, onRefresh = { onRefreshGesture() }, modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 Modifier.fillMaxSize().statusBarsPadding().testTag("home_refresh")
                     .semantics { contentDescription = "Refresh from SMS" },
-                contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                contentPadding = PaddingValues(top = 16.dp, bottom = 0.dp)
             ) {
-                item { Header(onOpenSettings) }
-                item { MethodCarousel(overview?.methods.orEmpty(), onOpenSettings, sharedScope, animatedScope, carouselState ?: rememberLazyListState()) { m -> onOpenMethod(m.channel, m.bankName, m.maskedAccountHint, month) } }
-                item { MonthSpendPager(repository, month, onMonthChange) }
-                // White sheet sized to its content (min one screen tall) so the whole list scrolls with
-                // the page instead of being clipped to a single fixed-height, non-scrolling panel.
-                item { TransactionSheet(Modifier.heightIn(min = LocalConfiguration.current.screenHeightDp.dp), overview, timeFilter, onTimeFilter, onOpenTransaction) }
+                item(key = "header") {
+                    Header(onOpenSettings)
+                    Spacer(Modifier.height(24.dp))
+                }
+                item(key = "carousel") {
+                    MethodCarousel(overview?.methods.orEmpty(), onOpenSettings, sharedScope, animatedScope, carouselState ?: rememberLazyListState()) { m -> onOpenMethod(m.channel, m.bankName, m.maskedAccountHint, month) }
+                    Spacer(Modifier.height(24.dp))
+                }
+                item(key = "month_pager") {
+                    MonthSpendPager(repository, month, onMonthChange, onOpenMonth)
+                    Spacer(Modifier.height(24.dp))
+                }
+                // White sheet with transactions flattened as direct lazy items so large lists
+                // virtualize properly and all items remain within touch-responsive bounds.
+                item(key = "sheet_header") {
+                    TransactionSheetHeader(
+                        timeFilter = timeFilter,
+                        onFilter = onTimeFilter,
+                        isEmpty = rows.isEmpty()
+                    )
+                }
+                itemsIndexed(rows, key = { _, row -> row.id }) { i, row ->
+                    Column(
+                        Modifier.fillMaxWidth().background(scheme.surface).padding(horizontal = 20.dp)
+                    ) {
+                        TransactionRow(row) { onOpenTransaction(row.id) }
+                        if (i < rows.lastIndex) HorizontalDivider(color = brand.hairline)
+                    }
+                }
+                item(key = "sheet_footer") {
+                    Spacer(
+                        Modifier.fillMaxWidth().heightIn(min = minFooterHeight)
+                            .background(scheme.surface).navigationBarsPadding().padding(bottom = 32.dp)
+                    )
+                }
             }
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
@@ -299,7 +346,7 @@ private fun AddMethodCard(width: Dp, onClick: () -> Unit) {
 
 /** Swipeable month total: pages are months oldest→current; swiping right slides in the previous month. */
 @Composable
-private fun MonthSpendPager(repository: TransactionRepository, month: String, onMonthChange: (String) -> Unit) {
+private fun MonthSpendPager(repository: TransactionRepository, month: String, onMonthChange: (String) -> Unit, onOpenMonth: (YearMonth) -> Unit = {}) {
     val months = remember { (23 downTo 0).map { YearMonth.now().minusMonths(it.toLong()) } }
     val startIndex = remember(month) { months.indexOf(YearMonth.parse(month)).let { if (it < 0) months.lastIndex else it } }
     val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { months.size })
@@ -307,12 +354,12 @@ private fun MonthSpendPager(repository: TransactionRepository, month: String, on
         snapshotFlow { pagerState.settledPage }.collect { onMonthChange(months[it].toString()) }
     }
     HorizontalPager(state = pagerState, contentPadding = PaddingValues(horizontal = 20.dp), pageSpacing = 12.dp) { page ->
-        MonthTotalCard(repository, months[page])
+        MonthTotalCard(repository, months[page], onOpenMonth)
     }
 }
 
 @Composable
-private fun MonthTotalCard(repository: TransactionRepository, ym: YearMonth) {
+private fun MonthTotalCard(repository: TransactionRepository, ym: YearMonth, onOpenMonth: (YearMonth) -> Unit = {}) {
     val scheme = MaterialTheme.colorScheme
     val brand = LocalBrand.current
     var total by remember(ym) { mutableStateOf<Long?>(null) }
@@ -325,7 +372,8 @@ private fun MonthTotalCard(repository: TransactionRepository, ym: YearMonth) {
         Modifier.fillMaxWidth().clip(glassShape)
             .background(Brush.verticalGradient(listOf(brand.glassTop, brand.glassBottom)))
             .border(1.dp, brand.glassBorder, glassShape)
-            .padding(24.dp),
+            .padding(24.dp)
+            .clickableMenu { onOpenMonth(ym) },
         verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("Total Spends", fontSize = 14.sp, color = brand.textSecondary)
@@ -336,27 +384,17 @@ private fun MonthTotalCard(repository: TransactionRepository, ym: YearMonth) {
 }
 
 @Composable
-private fun TransactionSheet(
-    modifier: Modifier, overview: SpendOverview?, timeFilter: String,
-    onFilter: (String) -> Unit, onOpenTransaction: (String) -> Unit
+private fun TransactionSheetHeader(
+    timeFilter: String,
+    onFilter: (String) -> Unit,
+    isEmpty: Boolean,
 ) {
     val scheme = MaterialTheme.colorScheme
     val brand = LocalBrand.current
-    val zone = ZoneId.systemDefault()
-    val today = LocalDate.now()
-    val rows = overview?.recentSpends.orEmpty().filter { row ->
-        val date = Instant.ofEpochMilli(row.effectiveTimestamp).atZone(zone).toLocalDate()
-        when (timeFilter) {
-            "Today" -> date == today
-            "This Week" -> !date.isBefore(today.minusDays(6))
-            else -> true
-        }
-    }
     var menu by remember { mutableStateOf(false) }
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
             .background(scheme.surface).padding(horizontal = 20.dp).padding(top = 20.dp)
-            .navigationBarsPadding().padding(bottom = 32.dp)
     ) {
         Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically) {
@@ -369,13 +407,8 @@ private fun TransactionSheet(
                 }
             }
         }
-        if (rows.isEmpty()) {
+        if (isEmpty) {
             Text("No spends in this period.", color = brand.textSecondary, modifier = Modifier.padding(vertical = 12.dp))
-        } else {
-            rows.forEachIndexed { i, row ->
-                TransactionRow(row) { onOpenTransaction(row.id) }
-                if (i < rows.lastIndex) HorizontalDivider(color = brand.hairline)
-            }
         }
     }
 }
