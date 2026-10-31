@@ -4,6 +4,10 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.2.0-alpha.8
+
+- Fixed the unclikable issue with lists
+
 ## 0.2.0-alpha.7
 
 - Removed uneccessary tests
