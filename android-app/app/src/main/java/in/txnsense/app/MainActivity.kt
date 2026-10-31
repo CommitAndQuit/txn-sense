@@ -77,6 +77,7 @@ var monthDetail by remember { mutableStateOf<YearMonth?>(null) }
                     showLedger -> ScreenState.Ledger
                     detailTxn != null -> ScreenState.Detail(detailTxn!!)
                     methodDetail != null -> ScreenState.Method(methodDetail!!)
+                    monthDetail != null -> ScreenState.MonthDetail(monthDetail!!)
                     else -> ScreenState.Home
                 }
                 SharedTransitionLayout {

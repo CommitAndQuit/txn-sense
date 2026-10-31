@@ -1,32 +1,35 @@
 package `in`.txnsense.app.feature
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.LocalConfiguration
+import `in`.txnsense.app.data.TransactionRepository
+import `in`.txnsense.app.money
+import `in`.txnsense.app.ui.Brand
+import `in`.txnsense.app.ui.LocalBrand
 import java.time.YearMonth
 import java.time.format.TextStyle
-import androidx.compose.ui.platform.LocalLocale
-import kotlin.math.roundToInt
-import `in`.txnsense.app.data.TransactionRepository
-import `in`.txnsense.app.ui.LocalBrand
+import java.util.Locale
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -42,7 +45,6 @@ fun MonthDetailScreen(
         (0..5).map { month.minusMonths(it.toLong()) }.reversed()
     }
     val data = remember { mutableStateOf<List<MonthBar>>(emptyList()) }
-    val scope = rememberCoroutineScope()
     LaunchedEffect(months) {
         val list = months.map { ym ->
             val amount = runCatching { repository.monthSpendTotal(ym.atDay(1)) }.getOrNull() ?: 0L
@@ -51,24 +53,18 @@ fun MonthDetailScreen(
         data.value = list
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(brand.bgTop, brand.bgBottom)))) {
-        // Top bar with back
-        Row(
-            Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("←", fontSize = 24.sp, color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.clickable { onBack() }.padding(8.dp))
-            Spacer(modifier = Modifier.weight(1f))
-            Text("Spend Comparison", style = MaterialTheme.typography.titleLarge)
+    Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(brand.bgTop, brand.bgBottom)))) {
+        BackHandler { onBack() }
+        
+        Text("Spend Comparison", style = MaterialTheme.typography.titleLarge, modifier = Modifier.statusBarsPadding().padding(16.dp))
+        
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            MonthBarChart(
+                data = data.value,
+                modifier = Modifier.heightIn(min = 250.dp, max = 350.dp).padding(horizontal = 16.dp),
+                maxAmount = data.value.maxOfOrNull { it.amount } ?: 0L
+            )
         }
-        // Bar chart
-        MonthBarChart(
-            data = data.value,
-            modifier = Modifier.weight(1f).padding(16.dp),
-            maxAmount = data.value.maxOfOrNull { it.amount } ?: 0L
-        )
     }
 }
 
@@ -79,30 +75,44 @@ private fun MonthBarChart(
     maxAmount: Long
 ) {
     val brand = LocalBrand.current
-    Box(modifier = modifier.fillMaxSize()) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val barWidth = size.width / data.size
-            data.forEachIndexed { i, bar ->
-                val barHeight = if (maxAmount == 0L) 0f else (bar.amount.toFloat() / maxAmount) * size.height
-                val left = i * barWidth
-                val top = size.height - barHeight
-                drawRoundRect(
-                    color = brand.lime,
-                    topLeft = Offset(left + barWidth * 0.05f, top),
-                    size = Size(barWidth * 0.9f, barHeight),
-                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
-                )
-            }
-        }
-        // Month labels
-        Row(
-            Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            data.forEach { bar ->
+    Row(
+        modifier = modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        data.forEach { bar ->
+            val barHeightFraction = if (maxAmount == 0L) 0f else bar.amount.toFloat() / maxAmount
+            
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            ) {
+                // The bar
+                Box(
+                    Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxHeight(barHeightFraction.coerceAtLeast(0.01f))
+                            .width(20.dp)
+                            .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                            .background(brand.lime)
+                    )
+                }
+                // The number
                 Text(
-                    bar.ym.month.getDisplayName(TextStyle.SHORT, LocalLocale.current.platformLocale),
-                    fontSize = 12.sp
+                    text = money(bar.amount),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = brand.onAccentDark,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                // The label
+                Text(
+                    bar.ym.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
+                    fontSize = 10.sp
                 )
             }
         }
