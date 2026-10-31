@@ -22,14 +22,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLocale
 import `in`.txnsense.app.data.TransactionRepository
 import `in`.txnsense.app.money
 import `in`.txnsense.app.ui.Brand
 import `in`.txnsense.app.ui.LocalBrand
 import java.time.YearMonth
 import java.time.format.TextStyle
-import java.util.Locale
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -111,7 +110,7 @@ private fun MonthBarChart(
                 )
                 // The label
                 Text(
-                    bar.ym.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
+                    bar.ym.month.getDisplayName(TextStyle.SHORT, LocalLocale.current.platformLocale),
                     fontSize = 10.sp
                 )
             }
