@@ -1,0 +1,1 @@
+Fixed lin failures fix(ui): improve MonthDetailScreen layout and navigation
