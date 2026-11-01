@@ -126,6 +126,7 @@ fun SpendTrackerScreen(
     historicalSmsSource: HistoricalSmsSource? = null,
     onOpenMonth: (YearMonth) -> Unit = {},
     onOpenTrends: (YearMonth) -> Unit = {},
+    onAddTransaction: (month: String) -> Unit = {},
 ) {
     val brand = LocalBrand.current
     val scheme = MaterialTheme.colorScheme
@@ -195,7 +196,7 @@ fun SpendTrackerScreen(
                     Spacer(Modifier.height(24.dp))
                 }
                 item(key = "carousel") {
-                    MethodCarousel(overview?.methods.orEmpty(), onOpenSettings, sharedScope, animatedScope, carouselState ?: rememberLazyListState()) { m -> onOpenMethod(m.channel, m.bankName, m.maskedAccountHint, month) }
+                    MethodCarousel(overview?.methods.orEmpty(), onAddPaymentMethod = { onAddTransaction(month) }, sharedScope, animatedScope, carouselState ?: rememberLazyListState()) { m -> onOpenMethod(m.channel, m.bankName, m.maskedAccountHint, month) }
                     Spacer(Modifier.height(24.dp))
                 }
                 item(key = "month_pager") {
@@ -319,7 +320,6 @@ private fun MethodCard(
         .clickableMenu { onOpenMethod(method) }.padding(20.dp)) {
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
-                Text(v.logo, fontSize = 18.sp, fontWeight = FontWeight.Black, color = v.onColor)
                 Column {
                     Text(v.label, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = v.onColor)
                     Text(instrumentLabel(method.bankName, method.maskedAccountHint),
@@ -357,6 +357,123 @@ private fun MethodPie(fraction: Float, color: Color, trackColor: Color, size: Dp
     }
 }
 
+internal data class BudgetPieLayout(
+    val ringCount: Int,
+    val percentage: Int,
+    val ringProgresses: List<Float>
+)
+
+internal fun calculateBudgetPieLayout(fraction: Float, isOverBudget: Boolean): BudgetPieLayout {
+    val safeFraction = fraction.coerceAtLeast(0f)
+    val percentage = (safeFraction * 100).roundToInt()
+    val fullTurns = safeFraction.toInt()
+    val remainder = safeFraction - fullTurns
+    val ringCount = if (!isOverBudget) {
+        1
+    } else {
+        (fullTurns + (if (remainder > 0.005f) 1 else 0)).coerceIn(1, 3)
+    }
+
+    val progresses = if (ringCount == 1) {
+        listOf(safeFraction.coerceIn(0f, 1f))
+    } else {
+        (0 until ringCount).map { i ->
+            when {
+                i == ringCount - 1 && safeFraction >= ringCount -> {
+                    if (remainder > 0.005f) remainder else 1f
+                }
+                else -> (safeFraction - i).coerceIn(0f, 1f)
+            }
+        }
+    }
+    return BudgetPieLayout(ringCount, percentage, progresses)
+}
+
+/** Donut showing budget consumption. When over budget, shows multiple concentric turns in red. */
+@Composable
+internal fun BudgetPie(
+    fraction: Float,
+    isOverBudget: Boolean,
+    color: Color,
+    trackColor: Color,
+    size: Dp = 104.dp
+) {
+    val layout = remember(fraction, isOverBudget) { calculateBudgetPieLayout(fraction, isOverBudget) }
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val minDim = this.size.minDimension
+            val center = Offset(this.size.width / 2f, this.size.height / 2f)
+
+            if (layout.ringCount == 1) {
+                val strokeWidth = minDim * 0.15f
+                val inset = strokeWidth / 2f
+                val arcSize = Size(minDim - strokeWidth, minDim - strokeWidth)
+                val sweep = 360f * (layout.ringProgresses.firstOrNull() ?: 0f)
+
+                drawArc(
+                    color = trackColor,
+                    startAngle = 0f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    topLeft = Offset(inset, inset),
+                    size = arcSize,
+                    style = Stroke(strokeWidth, cap = StrokeCap.Round)
+                )
+                if (sweep > 0f) {
+                    drawArc(
+                        color = color,
+                        startAngle = -90f,
+                        sweepAngle = sweep,
+                        useCenter = false,
+                        topLeft = Offset(inset, inset),
+                        size = arcSize,
+                        style = Stroke(strokeWidth, cap = StrokeCap.Round)
+                    )
+                }
+            } else {
+                val strokeWidth = if (layout.ringCount == 2) minDim * 0.095f else minDim * 0.075f
+                val gap = if (layout.ringCount == 2) minDim * 0.035f else minDim * 0.025f
+
+                for (i in 0 until layout.ringCount) {
+                    val r = (minDim - strokeWidth) / 2f - i * (strokeWidth + gap)
+                    if (r <= 0f) continue
+                    val topLeft = Offset(center.x - r, center.y - r)
+                    val arcSize = Size(r * 2f, r * 2f)
+                    val turnProgress = layout.ringProgresses.getOrElse(i) { 0f }
+
+                    drawArc(
+                        color = trackColor,
+                        startAngle = 0f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(strokeWidth, cap = StrokeCap.Round)
+                    )
+                    if (turnProgress > 0f) {
+                        drawArc(
+                            color = color,
+                            startAngle = -90f,
+                            sweepAngle = 360f * turnProgress,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(strokeWidth, cap = StrokeCap.Round)
+                        )
+                    }
+                }
+            }
+        }
+        Text(
+            "${layout.percentage}%",
+            fontSize = if (layout.ringCount >= 2) 16.sp else 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = color,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
 @Composable
 private fun AddMethodCard(width: Dp, onClick: () -> Unit) {
     val brand = LocalBrand.current
@@ -364,7 +481,10 @@ private fun AddMethodCard(width: Dp, onClick: () -> Unit) {
         Modifier.width(width).height(200.dp).clip(RoundedCornerShape(24.dp)).background(brand.navy).clickableMenu(onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text("+ Add Payment Method", color = brand.onAccentLight, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("+ Record Payment Entry", color = brand.onAccentLight, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("Add manual transaction for this month", color = brand.onAccentLight.copy(alpha = 0.7f), fontSize = 12.sp)
+        }
     }
 }
 
@@ -396,32 +516,68 @@ private fun MonthTotalCard(repository: TransactionRepository, ym: YearMonth, onO
     val targetBudget = if (budget > 0) budget else null
     val remainingAmount = targetBudget?.let { it - actualSpend }
     val glassShape = RoundedCornerShape(24.dp)
-    Column(
+    Box(
         Modifier.fillMaxWidth().clip(glassShape)
             .background(Brush.verticalGradient(listOf(brand.glassTop, brand.glassBottom)))
             .border(1.dp, brand.glassBorder, glassShape)
-            .padding(24.dp)
-            .clickableMenu { onOpenMonth(ym) },
-        verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally
+            .padding(20.dp)
+            .clickableMenu { onOpenMonth(ym) }
     ) {
-        Text("Total Spends", fontSize = 14.sp, color = brand.textSecondary)
-        Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = scheme.onSurface)
-        Text(money(actualSpend), fontSize = 40.sp, fontWeight = FontWeight.Bold,
-            color = scheme.onSurface, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         if (targetBudget != null && remainingAmount != null) {
             val isOverBudget = remainingAmount < 0
             val color = if (isOverBudget) scheme.error else scheme.onSurface
-            Text(
-                if (isOverBudget) "Crossed budget by ${money(-remainingAmount)}" else "${money(remainingAmount)} remaining",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
-            Text(
-                "Target: ${money(targetBudget)}",
-                fontSize = 12.sp,
-                color = brand.textSecondary
-            )
+            val trackColor = if (isOverBudget) scheme.error.copy(alpha = 0.2f) else scheme.onSurface.copy(alpha = 0.15f)
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = brand.textSecondary)
+                    Text(
+                        money(actualSpend),
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onSurface
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (isOverBudget) "Crossed budget by ${money(-remainingAmount)}" else "${money(remainingAmount)} remaining",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = color
+                    )
+                    Text(
+                        "Target: ${money(targetBudget)}",
+                        fontSize = 12.sp,
+                        color = brand.textSecondary
+                    )
+                }
+                Spacer(Modifier.width(16.dp))
+                BudgetPie(
+                    fraction = actualSpend.toFloat() / targetBudget.toFloat(),
+                    isOverBudget = isOverBudget,
+                    color = color,
+                    trackColor = trackColor,
+                    size = 104.dp
+                )
+            }
+        } else {
+            Column(
+                Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = brand.textSecondary)
+                Text(
+                    money(actualSpend),
+                    fontSize = 40.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }

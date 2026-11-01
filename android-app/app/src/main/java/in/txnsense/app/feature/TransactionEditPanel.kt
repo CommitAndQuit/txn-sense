@@ -174,7 +174,7 @@ fun TransactionEditPanel(
                     }
                     // Edit button to expand
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { expanded = true }) { Text("Edit all details") }
+                        OutlinedButton(onClick = { expanded = true }) { Text("Edit all details") }
                     }
                 }
             }
@@ -270,7 +270,7 @@ fun TransactionEditPanel(
                     }
 
                     if (compact) {
-                        TextButton(onClick = { compact = false }) { Text("Edit all details") }
+                        OutlinedButton(onClick = { compact = false }) { Text("Edit all details") }
                     }
 
                     if (!compact) {

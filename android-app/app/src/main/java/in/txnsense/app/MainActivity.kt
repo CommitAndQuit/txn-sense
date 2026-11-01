@@ -17,14 +17,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.YearMonth
+import java.time.ZoneId
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -33,6 +38,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import `in`.txnsense.app.feature.MonthCategorySpendsScreen
 import `in`.txnsense.app.feature.MonthDetailScreen
+import `in`.txnsense.app.feature.TransactionForm
 
 class MainActivity : ComponentActivity() {
     private val request = mutableStateOf<Pair<String, Boolean>?>(null)
@@ -55,6 +61,7 @@ class MainActivity : ComponentActivity() {
                 var methodDetail by remember { mutableStateOf<MethodRef?>(null) }
                 // Styled transaction detail page (transaction id), reached by tapping a transaction row.
                 var detailTxn by rememberSaveable { mutableStateOf<String?>(null) }
+                var addTxnMonth by rememberSaveable { mutableStateOf<String?>(null) }
                 // Home UI state hoisted above AnimatedContent so it survives navigating into the
                 // detail page and back: the carousel scroll position, the selected month, and the
                 // loaded overview (so the home never flashes empty on return, which reset the scroll).
@@ -81,6 +88,7 @@ class MainActivity : ComponentActivity() {
                     methodDetail != null -> ScreenState.Method(methodDetail!!)
                     categorySpendsMonth != null -> ScreenState.CategorySpends(categorySpendsMonth!!)
                     trendsMonth != null -> ScreenState.Trends(trendsMonth!!)
+                    addTxnMonth != null -> ScreenState.AddTransaction(addTxnMonth!!)
                     else -> ScreenState.Home
                 }
                 SharedTransitionLayout {
@@ -125,6 +133,26 @@ class MainActivity : ComponentActivity() {
                                     MonthDetailScreen(repository, s.month, onBack = { trendsMonth = null },
                                         sharedScope = this@SharedTransitionLayout, animatedScope = this@AnimatedContent)
                                 }
+                                is ScreenState.AddTransaction -> {
+                                    val ym = runCatching { YearMonth.parse(s.month) }.getOrElse { YearMonth.now() }
+                                    val defaultTimestamp = remember(s.month) {
+                                        val now = LocalDate.now()
+                                        val currentYm = YearMonth.from(now)
+                                        val date = if (ym == currentYm) now else ym.atDay(1)
+                                        val time = if (ym == currentYm) LocalTime.now() else LocalTime.of(12, 0)
+                                        date.atTime(time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                                    }
+                                    Surface(Modifier.fillMaxSize()) {
+                                        Box(Modifier.fillMaxSize().statusBarsPadding().padding(16.dp)) {
+                                            TransactionForm(
+                                                repository = repository,
+                                                existing = null,
+                                                onDone = { addTxnMonth = null },
+                                                defaultTimestamp = defaultTimestamp
+                                            )
+                                        }
+                                    }
+                                }
                                 ScreenState.Home -> {
                                     `in`.txnsense.app.feature.SpendTrackerScreen(repository,
                                         month = homeMonth, overview = homeOverview, onMonthChange = { homeMonth = it },
@@ -135,7 +163,8 @@ class MainActivity : ComponentActivity() {
                                         sharedScope = this@SharedTransitionLayout, animatedScope = this@AnimatedContent,
                                         carouselState = carouselState,
                                         onOpenMonth = { ym -> categorySpendsMonth = ym },
-                                        onOpenTrends = { ym -> trendsMonth = ym })
+                                        onOpenTrends = { ym -> trendsMonth = ym },
+                                        onAddTransaction = { m -> addTxnMonth = m })
                                 }
                             }
                         }
@@ -168,6 +197,7 @@ private sealed interface ScreenState {
     data class Detail(val id: String) : ScreenState
     data class CategorySpends(val month: YearMonth) : ScreenState
     data class Trends(val month: YearMonth) : ScreenState
+    data class AddTransaction(val month: String) : ScreenState
 }
 
 @Composable

@@ -23,7 +23,14 @@ import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TransactionForm(repository: TransactionRepository, existing: TransactionEntity?, onDone: () -> Unit, onDirtyChange: (Boolean) -> Unit = {}, quickOnly: Boolean = false) {
+fun TransactionForm(
+    repository: TransactionRepository,
+    existing: TransactionEntity?,
+    onDone: () -> Unit,
+    onDirtyChange: (Boolean) -> Unit = {},
+    quickOnly: Boolean = false,
+    defaultTimestamp: Long? = null
+) {
     var compact by rememberSaveable(existing?.id, quickOnly) { mutableStateOf(quickOnly && existing != null) }
     val formatter = remember { DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm").withResolverStyle(java.time.format.ResolverStyle.STRICT) }
     val draftId = rememberSaveable(existing?.id) { java.util.UUID.randomUUID().toString() }
@@ -32,10 +39,11 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
     var status by rememberSaveable(existing?.id) { mutableStateOf(existing?.status ?: "Successful") }
     var type by rememberSaveable(existing?.id) { mutableStateOf(existing?.transactionType ?: "Other") }
     var channel by rememberSaveable(existing?.id) { mutableStateOf(existing?.channel ?: "CashManual") }
-    val initialDate = rememberSaveable(existing?.id) {
-        LocalDateTime.ofInstant(Instant.ofEpochMilli(existing?.effectiveTimestamp ?: System.currentTimeMillis()), ZoneId.systemDefault()).format(formatter)
+    val initialDate = rememberSaveable(existing?.id, defaultTimestamp) {
+        val ts = existing?.effectiveTimestamp ?: defaultTimestamp ?: System.currentTimeMillis()
+        LocalDateTime.ofInstant(Instant.ofEpochMilli(ts), ZoneId.systemDefault()).format(formatter)
     }
-    var date by rememberSaveable(existing?.id) { mutableStateOf(initialDate) }
+    var date by rememberSaveable(existing?.id, defaultTimestamp) { mutableStateOf(initialDate) }
     var label by rememberSaveable(existing?.id) { mutableStateOf(existing?.counterpartyLabel ?: "") }
     var notes by rememberSaveable(existing?.id) { mutableStateOf(existing?.userNotes ?: "") }
     var hint by rememberSaveable(existing?.id) { mutableStateOf(existing?.maskedAccountHint?.takeLast(4) ?: "") }
@@ -128,7 +136,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
                 OutlinedTextField(repaid, { repaid = it }, label = { Text("Already repaid (INR, optional)") }, supportingText = { Text("Update this when people repay you.") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
             }
         }
-        if (compact) TextButton(onClick = { compact = false }) { Text("Edit all details") }
+        if (compact) OutlinedButton(onClick = { compact = false }) { Text("Edit all details") }
         if (!compact) {
         val selectedDate = LocalDateTime.parse(date, formatter)
         TextButton(onClick = {
