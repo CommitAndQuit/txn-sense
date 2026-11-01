@@ -4,6 +4,13 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.2.0-alpha.10
+
+- Added some fixes and option to manually add spends
+- Realigned the UI for trends page
+- Added per months spend grouping into different classes such as investment and expense
+- feat(ui): add monthly budget tracker to spend tracker
+
 ## 0.2.0-alpha.9
 
 - Fixed lin failures
