@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import `in`.txnsense.app.feature.MonthCategorySpendsScreen
 import `in`.txnsense.app.feature.MonthDetailScreen
 
 class MainActivity : ComponentActivity() {
@@ -48,7 +49,8 @@ class MainActivity : ComponentActivity() {
                 val repository = (application as TxnSenseApp).container.repository
                 var showLedger by rememberSaveable { mutableStateOf(false) }
                 var openSettings by rememberSaveable { mutableStateOf(false) }
-var monthDetail by remember { mutableStateOf<YearMonth?>(null) }
+                var categorySpendsMonth by remember { mutableStateOf<YearMonth?>(null) }
+                var trendsMonth by remember { mutableStateOf<YearMonth?>(null) }
                 // Payment-method detail page (one instrument), reached by tapping a home card.
                 var methodDetail by remember { mutableStateOf<MethodRef?>(null) }
                 // Styled transaction detail page (transaction id), reached by tapping a transaction row.
@@ -77,7 +79,8 @@ var monthDetail by remember { mutableStateOf<YearMonth?>(null) }
                     showLedger -> ScreenState.Ledger
                     detailTxn != null -> ScreenState.Detail(detailTxn!!)
                     methodDetail != null -> ScreenState.Method(methodDetail!!)
-                    monthDetail != null -> ScreenState.MonthDetail(monthDetail!!)
+                    categorySpendsMonth != null -> ScreenState.CategorySpends(categorySpendsMonth!!)
+                    trendsMonth != null -> ScreenState.Trends(trendsMonth!!)
                     else -> ScreenState.Home
                 }
                 SharedTransitionLayout {
@@ -112,11 +115,17 @@ var monthDetail by remember { mutableStateOf<YearMonth?>(null) }
                                         onBack = { detailTxn = null },
                                         onOpenTransaction = { detailTxn = it })
                                 }
-                                is ScreenState.MonthDetail -> {
-    MonthDetailScreen(repository, s.month, onBack = { monthDetail = null },
-        sharedScope = this@SharedTransitionLayout, animatedScope = this@AnimatedContent)
-}
-ScreenState.Home -> {
+                                is ScreenState.CategorySpends -> {
+                                    MonthCategorySpendsScreen(repository, s.month,
+                                        onBack = { categorySpendsMonth = null },
+                                        onOpenTransaction = { detailTxn = it },
+                                        sharedScope = this@SharedTransitionLayout, animatedScope = this@AnimatedContent)
+                                }
+                                is ScreenState.Trends -> {
+                                    MonthDetailScreen(repository, s.month, onBack = { trendsMonth = null },
+                                        sharedScope = this@SharedTransitionLayout, animatedScope = this@AnimatedContent)
+                                }
+                                ScreenState.Home -> {
                                     `in`.txnsense.app.feature.SpendTrackerScreen(repository,
                                         month = homeMonth, overview = homeOverview, onMonthChange = { homeMonth = it },
                                         timeFilter = homeTimeFilter, onTimeFilter = { homeTimeFilter = it },
@@ -124,7 +133,9 @@ ScreenState.Home -> {
                                         onOpenSettings = { openSettings = true; showLedger = true },
                                         onOpenMethod = { channel, bank, last4, month -> methodDetail = MethodRef(channel, bank, last4, month) },
                                         sharedScope = this@SharedTransitionLayout, animatedScope = this@AnimatedContent,
-                                        carouselState = carouselState, onOpenMonth = { ym -> monthDetail = ym })
+                                        carouselState = carouselState,
+                                        onOpenMonth = { ym -> categorySpendsMonth = ym },
+                                        onOpenTrends = { ym -> trendsMonth = ym })
                                 }
                             }
                         }
@@ -155,7 +166,8 @@ private sealed interface ScreenState {
     data object Ledger : ScreenState
     data class Method(val ref: MethodRef) : ScreenState
     data class Detail(val id: String) : ScreenState
-    data class MonthDetail(val month: YearMonth) : ScreenState
+    data class CategorySpends(val month: YearMonth) : ScreenState
+    data class Trends(val month: YearMonth) : ScreenState
 }
 
 @Composable

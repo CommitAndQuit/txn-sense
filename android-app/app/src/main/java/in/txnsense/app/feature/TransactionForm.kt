@@ -99,7 +99,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         if (direction == "Unknown") Text("Choose money out, money in, or transfer.", color = MaterialTheme.colorScheme.error)
         OutlinedTextField(label, { label = it.take(60) }, label = { Text("Label (optional)") }, supportingText = { Text("A short description, not personal or account details.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         }
-        Choice("Category", category, listOf("Other", "Food", "Travel", "Shopping", "Bills", "Health", "Education", "Entertainment", "Cash")) { category = it }
+        Choice("Category", category, listOf("Other", "Food", "Groceries", "Travel", "Shopping", "Bills", "Health", "Education", "Entertainment", "Cash", "Random")) { category = it }
         if (direction != "Credit") {
             Text("How should this count?", style = MaterialTheme.typography.labelLarge)
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

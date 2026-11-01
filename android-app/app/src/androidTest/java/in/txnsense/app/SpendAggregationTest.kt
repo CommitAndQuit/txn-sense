@@ -86,4 +86,76 @@ class SpendAggregationTest {
             assertNull(repaymentSummary(repo.get(family)!!))
         } finally { repo.eraseAll(); repo.close() }
     }
+
+    @Test fun category_spends_aggregates_eligible_expenses_by_category() = runBlocking {
+        val repo = repository()
+        val now = System.currentTimeMillis()
+        try {
+            val food1 = repo.save(ManualInput("300.00", Direction.Debit, now,
+                TransactionType.MerchantPayment, channel = Channel.UPI, category = "Food"))
+            val food2 = repo.save(ManualInput("150.00", Direction.Debit, now,
+                TransactionType.MerchantPayment, channel = Channel.Card, category = "Food"))
+            val travel = repo.save(ManualInput("200.00", Direction.Debit, now,
+                TransactionType.MerchantPayment, channel = Channel.UPI, category = "Travel"))
+            // Non-expense should be excluded
+            repo.save(ManualInput("500.00", Direction.Debit, now,
+                TransactionType.Other, channel = Channel.UPI, category = "Food", spendType = SpendingType.Investment))
+            // Self-transfer should be excluded
+            repo.save(ManualInput("400.00", Direction.Debit, now,
+                TransactionType.SelfTransfer, channel = Channel.UPI, category = "Food"))
+
+            val catSpends = repo.categorySpends()
+            assertEquals(2, catSpends.size)
+
+            val top = catSpends[0]
+            assertEquals("Food", top.category)
+            assertEquals(45000L, top.totalMinor)
+            assertEquals(2, top.count)
+            assertEquals(listOf(food1, food2).toSet(), top.transactions.map { it.id }.toSet())
+
+            val second = catSpends[1]
+            assertEquals("Travel", second.category)
+            assertEquals(20000L, second.totalMinor)
+            assertEquals(1, second.count)
+            assertEquals(listOf(travel), second.transactions.map { it.id })
+        } finally { repo.eraseAll(); repo.close() }
+    }
+
+    @Test fun month_category_breakdown_classifies_major_groups_and_sub_groups() = runBlocking {
+        val repo = repository()
+        val now = System.currentTimeMillis()
+        try {
+            repo.save(ManualInput("300.00", Direction.Debit, now,
+                TransactionType.MerchantPayment, channel = Channel.UPI, category = "Food"))
+            repo.save(ManualInput("120.00", Direction.Debit, now,
+                TransactionType.MerchantPayment, channel = Channel.UPI, category = "Groceries"))
+            repo.save(ManualInput("1000.00", Direction.Debit, now,
+                TransactionType.Other, channel = Channel.BankTransfer, category = "Stocks", spendType = SpendingType.Investment))
+            repo.save(ManualInput("5000.00", Direction.Credit, now,
+                TransactionType.SalaryIncome, channel = Channel.BankTransfer, category = "Salary"))
+
+            val breakdown = repo.monthCategoryBreakdown()
+
+            // Spends
+            assertEquals(42000L, breakdown.spends.totalMinor)
+            assertEquals(2, breakdown.spends.count)
+            assertEquals(2, breakdown.spends.subGroups.size)
+            assertEquals("Food", breakdown.spends.subGroups[0].name)
+            assertEquals(30000L, breakdown.spends.subGroups[0].totalMinor)
+            assertEquals("Groceries", breakdown.spends.subGroups[1].name)
+            assertEquals(12000L, breakdown.spends.subGroups[1].totalMinor)
+
+            // Investment
+            assertEquals(100000L, breakdown.investment.totalMinor)
+            assertEquals(1, breakdown.investment.count)
+            assertEquals(1, breakdown.investment.subGroups.size)
+            assertEquals("Stocks", breakdown.investment.subGroups[0].name)
+
+            // Income
+            assertEquals(500000L, breakdown.income.totalMinor)
+            assertEquals(1, breakdown.income.count)
+            assertEquals(1, breakdown.income.subGroups.size)
+            assertEquals("Salary", breakdown.income.subGroups[0].name)
+        } finally { repo.eraseAll(); repo.close() }
+    }
 }

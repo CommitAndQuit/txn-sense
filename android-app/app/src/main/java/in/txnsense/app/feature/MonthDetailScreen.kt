@@ -54,15 +54,45 @@ fun MonthDetailScreen(
 
     Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(brand.bgTop, brand.bgBottom)))) {
         BackHandler { onBack() }
-        
-        Text("Spend Comparison", style = MaterialTheme.typography.titleLarge, modifier = Modifier.statusBarsPadding().padding(16.dp))
-        
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            MonthBarChart(
-                data = data.value,
-                modifier = Modifier.heightIn(min = 250.dp, max = 350.dp).padding(horizontal = 16.dp),
-                maxAmount = data.value.maxOfOrNull { it.amount } ?: 0L
-            )
+
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "←",
+                    fontSize = 26.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .clickableMenu(onBack)
+                        .padding(8.dp)
+                )
+                Column {
+                    Text(
+                        "Spend Comparison",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "Last 6 months trend",
+                        fontSize = 12.sp,
+                        color = brand.textSecondary
+                    )
+                }
+            }
+
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                MonthBarChart(
+                    data = data.value,
+                    modifier = Modifier.heightIn(min = 250.dp, max = 350.dp).padding(horizontal = 16.dp),
+                    maxAmount = data.value.maxOfOrNull { it.amount } ?: 0L
+                )
+            }
         }
     }
 }

@@ -229,7 +229,7 @@ fun TransactionEditPanel(
                         )
                     }
 
-                    Choice("Category", category, listOf("Other", "Food", "Travel", "Shopping", "Bills", "Health", "Education", "Entertainment", "Cash")) { category = it }
+                    Choice("Category", category, listOf("Other", "Food", "Groceries", "Travel", "Shopping", "Bills", "Health", "Education", "Entertainment", "Cash", "Random")) { category = it }
 
                     if (direction != "Credit") {
                         Text("How should this count?", style = MaterialTheme.typography.labelLarge)

@@ -37,6 +37,41 @@ data class SpendOverview(
     val recentSpends: List<TransactionEntity>,
 )
 
+enum class MajorGroup(val label: String) {
+    Spends("Spends"),
+    Investment("Investment"),
+    Income("Income")
+}
+
+data class CategorySubGroup(
+    val name: String,
+    val totalMinor: Long,
+    val count: Int,
+    val transactions: List<TransactionEntity> = emptyList(),
+)
+
+data class MajorGroupSummary(
+    val group: MajorGroup,
+    val totalMinor: Long,
+    val count: Int,
+    val subGroups: List<CategorySubGroup> = emptyList(),
+)
+
+data class MonthCategoryBreakdown(
+    val month: LocalDate,
+    val spends: MajorGroupSummary,
+    val investment: MajorGroupSummary,
+    val income: MajorGroupSummary,
+)
+
+/** Spend breakdown for one category in a calendar month. */
+data class CategorySpend(
+    val category: String,
+    val totalMinor: Long,
+    val count: Int,
+    val transactions: List<TransactionEntity> = emptyList(),
+)
+
 /** Result of re-locating the SMS a transaction was parsed from. The body/sender are read live
  *  from the inbox and never stored; only the keyed HMAC fingerprint is kept in the database. */
 sealed interface OriginalSms {
@@ -264,6 +299,125 @@ class TransactionRepository(private val context: Context, private val namespace:
                 row.transactionType !in listOf(TransactionType.SelfTransfer.name, TransactionType.CardRepayment.name) &&
                 row.ownership != SpendingOwnership.SelfTransfer.name
         }.sortedByDescending { it.effectiveTimestamp }
+    }
+
+    /** Breakdown of transactions into Spends, Investment, and Income major groups, with sub-groups for each. */
+    suspend fun monthCategoryBreakdown(month: LocalDate = LocalDate.now().withDayOfMonth(1)): MonthCategoryBreakdown = locked {
+        val m = month.withDayOfMonth(1)
+        if (database == null && !context.getDatabasePath(dbName).exists()) {
+            return@locked MonthCategoryBreakdown(
+                month = m,
+                spends = MajorGroupSummary(MajorGroup.Spends, 0L, 0),
+                investment = MajorGroupSummary(MajorGroup.Investment, 0L, 0),
+                income = MajorGroupSummary(MajorGroup.Income, 0L, 0),
+            )
+        }
+        val zone = ZoneId.systemDefault()
+        val start = m.atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = m.plusMonths(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val dao = db().transactions()
+        val reversedOriginals = dao.reversedOriginals().toSet()
+        val rows = dao.between(start, end).filter { row ->
+            row.id !in reversedOriginals &&
+                row.status == TransactionStatus.Successful.name &&
+                row.reviewState != ReviewState.NeedsReview.name &&
+                row.transactionType !in listOf(TransactionType.SelfTransfer.name, TransactionType.CardRepayment.name) &&
+                row.ownership != SpendingOwnership.SelfTransfer.name
+        }
+
+        // 1. Spends: debits with spendType == Expense (excluding Investment-categorized ones)
+        val spendsDebits = rows.filter {
+            it.direction == Direction.Debit.name &&
+                it.spendType == SpendingType.Expense.name &&
+                !it.category.equals("Investment", ignoreCase = true)
+        }
+        val spendsRefunds = rows.filter {
+            it.direction == Direction.Credit.name &&
+                it.transactionType in listOf(TransactionType.Refund.name, TransactionType.Reversal.name) &&
+                it.spendType == SpendingType.Expense.name
+        }
+        val spendSubGroups = spendsDebits.groupBy { it.category }
+            .map { (cat, txns) ->
+                val refunds = spendsRefunds.filter { it.category == cat }
+                val gross = txns.sumOf { it.amountMinor ?: 0L }
+                val refMinor = refunds.sumOf { it.amountMinor ?: 0L }
+                val net = (gross - refMinor).coerceAtLeast(0L)
+                CategorySubGroup(
+                    name = cat,
+                    totalMinor = net,
+                    count = txns.size,
+                    transactions = (txns + refunds).sortedByDescending { it.effectiveTimestamp }
+                )
+            }
+            .sortedByDescending { it.totalMinor }
+        val spendsTotal = spendSubGroups.sumOf { it.totalMinor }
+        val spendsCount = spendsDebits.size
+
+        // 2. Investment: spendType == Investment or category == "Investment"
+        val investmentRows = rows.filter {
+            it.spendType == SpendingType.Investment.name || it.category.equals("Investment", ignoreCase = true)
+        }
+        val investmentSubGroups = investmentRows.groupBy {
+            if (it.category.isNotBlank() && !it.category.equals("Other", ignoreCase = true) && !it.category.equals("Investment", ignoreCase = true)) {
+                it.category
+            } else if (!it.counterpartyLabel.isNullOrBlank()) {
+                it.counterpartyLabel
+            } else {
+                "General"
+            }
+        }.map { (name, txns) ->
+            CategorySubGroup(
+                name = name,
+                totalMinor = txns.sumOf { it.amountMinor ?: 0L },
+                count = txns.size,
+                transactions = txns.sortedByDescending { it.effectiveTimestamp }
+            )
+        }.sortedByDescending { it.totalMinor }
+        val investmentTotal = investmentSubGroups.sumOf { it.totalMinor }
+        val investmentCount = investmentRows.size
+
+        // 3. Income: genuine credits (excluding refunds/reversals/investments)
+        val incomeRows = rows.filter {
+            it.direction == Direction.Credit.name &&
+                it.transactionType !in listOf(TransactionType.Refund.name, TransactionType.Reversal.name) &&
+                it.spendType != SpendingType.Investment.name &&
+                !it.category.equals("Investment", ignoreCase = true)
+        }
+        val incomeSubGroups = incomeRows.groupBy {
+            if (it.category.isNotBlank() && !it.category.equals("Other", ignoreCase = true)) {
+                it.category
+            } else if (it.transactionType == TransactionType.SalaryIncome.name) {
+                "Salary"
+            } else if (!it.counterpartyLabel.isNullOrBlank()) {
+                it.counterpartyLabel
+            } else {
+                "General Income"
+            }
+        }.map { (name, txns) ->
+            CategorySubGroup(
+                name = name,
+                totalMinor = txns.sumOf { it.amountMinor ?: 0L },
+                count = txns.size,
+                transactions = txns.sortedByDescending { it.effectiveTimestamp }
+            )
+        }.sortedByDescending { it.totalMinor }
+        val incomeTotal = incomeSubGroups.sumOf { it.totalMinor }
+        val incomeCount = incomeRows.size
+
+        MonthCategoryBreakdown(
+            month = m,
+            spends = MajorGroupSummary(MajorGroup.Spends, spendsTotal, spendsCount, spendSubGroups),
+            investment = MajorGroupSummary(MajorGroup.Investment, investmentTotal, investmentCount, investmentSubGroups),
+            income = MajorGroupSummary(MajorGroup.Income, incomeTotal, incomeCount, incomeSubGroups)
+        )
+    }
+
+    /** Breakdown of net spend per category in a calendar month, sorted by spend descending. */
+    suspend fun categorySpends(month: LocalDate = LocalDate.now().withDayOfMonth(1)): List<CategorySpend> {
+        val breakdown = monthCategoryBreakdown(month)
+        return breakdown.spends.subGroups.map {
+            CategorySpend(it.name, it.totalMinor, it.count, it.transactions)
+        }
     }
 
     suspend fun addPaymentSource(nickname: String, kind: String, channel: Channel, bankName: String = "", last4: String = ""): PaymentSourceEntity = locked {

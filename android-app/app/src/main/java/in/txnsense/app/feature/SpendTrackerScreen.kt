@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import `in`.txnsense.app.R
 import `in`.txnsense.app.data.AndroidHistoricalSmsSource
 import `in`.txnsense.app.data.HistoricalSmsSource
 import `in`.txnsense.app.data.MethodSpend
@@ -121,7 +123,9 @@ fun SpendTrackerScreen(
     sharedScope: SharedTransitionScope? = null,
     animatedScope: AnimatedVisibilityScope? = null,
     carouselState: androidx.compose.foundation.lazy.LazyListState? = null,
-    historicalSmsSource: HistoricalSmsSource? = null, onOpenMonth: (YearMonth) -> Unit = {},
+    historicalSmsSource: HistoricalSmsSource? = null,
+    onOpenMonth: (YearMonth) -> Unit = {},
+    onOpenTrends: (YearMonth) -> Unit = {},
 ) {
     val brand = LocalBrand.current
     val scheme = MaterialTheme.colorScheme
@@ -218,10 +222,30 @@ fun SpendTrackerScreen(
                 item(key = "sheet_footer") {
                     Spacer(
                         Modifier.fillMaxWidth().heightIn(min = minFooterHeight)
-                            .background(scheme.surface).navigationBarsPadding().padding(bottom = 32.dp)
+                            .background(scheme.surface).navigationBarsPadding().padding(bottom = 88.dp)
                     )
                 }
             }
+        }
+        FloatingActionButton(
+            onClick = {
+                val ym = runCatching { YearMonth.parse(month) }.getOrElse { YearMonth.now() }
+                onOpenTrends(ym)
+            },
+            shape = CircleShape,
+            containerColor = brand.navy,
+            contentColor = brand.onAccentLight,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .navigationBarsPadding()
+                .padding(end = 20.dp, bottom = 24.dp)
+                .semantics { contentDescription = "Trends" }
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_trending_up),
+                contentDescription = null,
+                modifier = Modifier.size(24.dp)
+            )
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
     }
